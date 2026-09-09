@@ -51,3 +51,19 @@ Route::prefix('v1/core')->group(function () {
     Route::get('settings', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'index']);
     Route::post('settings', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'update']);
 });
+
+Route::prefix('v1/accounting')->group(function () {
+    // 1. دليل الحسابات (Chart of Accounts)
+    Route::get('accounts/tree', [\App\Http\Controllers\Api\V1\Accounting\AccountController::class, 'tree']);
+    Route::get('accounts/leaf', [\App\Http\Controllers\Api\V1\Accounting\AccountController::class, 'leafAccounts']);
+    Route::apiResource('accounts', \App\Http\Controllers\Api\V1\Accounting\AccountController::class);
+
+    // 2. قيود اليومية المحاسبية (Journal Entries Engine)
+    Route::apiResource('journal-entries', \App\Http\Controllers\Api\V1\Accounting\JournalEntryController::class);
+    Route::post('journal-entries/{id}/post', [\App\Http\Controllers\Api\V1\Accounting\JournalEntryController::class, 'post']);
+    Route::post('journal-entries/{id}/reverse', [\App\Http\Controllers\Api\V1\Accounting\JournalEntryController::class, 'reverse']);
+
+    // 3. مراكز التكلفة (Cost Centers)
+    Route::apiResource('cost-centers', \App\Http\Controllers\Api\V1\Accounting\CostCenterController::class);
+});
+

@@ -35,6 +35,16 @@ class AppServiceProvider extends ServiceProvider
             \App\Domains\Core\Repositories\Contracts\SettingRepositoryInterface::class,
             \App\Domains\Core\Repositories\Eloquent\SettingRepository::class
         );
+
+        $this->app->bind(
+            \App\Domains\Accounting\Repositories\Contracts\AccountRepositoryInterface::class,
+            \App\Domains\Accounting\Repositories\Eloquent\AccountRepository::class
+        );
+
+        $this->app->bind(
+            \App\Domains\Accounting\Repositories\Contracts\JournalEntryRepositoryInterface::class,
+            \App\Domains\Accounting\Repositories\Eloquent\JournalEntryRepository::class
+        );
     }
 
     /**

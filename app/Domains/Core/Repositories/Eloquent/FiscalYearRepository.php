@@ -80,8 +80,8 @@ class FiscalYearRepository implements FiscalYearRepositoryInterface
         $formatted = $date instanceof DateTimeInterface ? $date->format('Y-m-d') : $date;
 
         return FiscalPeriod::with(['fiscalYear'])
-            ->where('start_date', '<=', $formatted)
-            ->where('end_date', '>=', $formatted)
+            ->whereDate('start_date', '<=', $formatted)
+            ->whereDate('end_date', '>=', $formatted)
             ->first();
     }
 

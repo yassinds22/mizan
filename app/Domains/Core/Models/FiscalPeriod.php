@@ -63,7 +63,7 @@ class FiscalPeriod extends Model
     {
         $formattedDate = $date instanceof DateTimeInterface ? $date->format('Y-m-d') : $date;
 
-        return $query->where('start_date', '<=', $formattedDate)
-            ->where('end_date', '>=', $formattedDate);
+        return $query->whereDate('start_date', '<=', $formattedDate)
+            ->whereDate('end_date', '>=', $formattedDate);
     }
 }
