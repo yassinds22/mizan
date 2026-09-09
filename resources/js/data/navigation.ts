@@ -17,6 +17,7 @@ export const navGroups: NavGroup[] = [
     label: "المالية والجودة",
     items: [
       { id: "accounting", label: "الحسابات العامة", icon: "BookOpen" },
+      { id: "currencies", label: "العملات وأسعار الصرف", icon: "Coins" },
       { id: "expiry", label: "الصلاحية والدفعات", icon: "CalendarClock" },
       { id: "fefo", label: "إدارة FEFO", icon: "ListOrdered" },
       { id: "waste-alerts", label: "تنبيهات الهدر", icon: "Siren" },
@@ -122,6 +123,10 @@ export const pageMeta: Record<PageId, PageMetaItem> = {
   settings: {
     title: "إعدادات الشركة",
     subtitle: "البيانات الضريبية، السنة المالية، والطباعة",
+  },
+  currencies: {
+    title: "إدارة العملات وأسعار الصرف",
+    subtitle: "العملة الأساسية للنظام، العملات الأجنبية، وسجل أسعار الصرف التاريخية",
   },
   "system-states": {
     title: "حالات النظام",

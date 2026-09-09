@@ -21,6 +21,7 @@ export type PageId =
   | "period-close"
   | "users-roles"
   | "settings"
+  | "currencies"
   | "system-states";
 
 export type Navigate = (page: PageId) => void;

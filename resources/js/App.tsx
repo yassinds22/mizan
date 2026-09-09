@@ -21,12 +21,85 @@ import { FefoPage } from "@/modules/expiry/pages/FefoPage";
 import { WasteAlertsPage } from "@/modules/expiry/pages/WasteAlertsPage";
 import { ReportsPage } from "@/modules/reports/pages/ReportsPage";
 import { SettingsPage } from "@/modules/settings/pages/SettingsPage";
+import { CurrenciesPage } from "@/modules/accounting/pages/CurrenciesPage";
 import { UsersRolesPage } from "@/modules/settings/pages/UsersRolesPage";
 import { SystemStatesPage } from "@/modules/settings/pages/SystemStatesPage";
 import type { PageId } from "@/types/navigation";
 
+const VALID_PAGES: Set<string> = new Set([
+  "dashboard",
+  "inventory",
+  "purchases",
+  "sales",
+  "accounting",
+  "expiry",
+  "reports",
+  "partners",
+  "item-detail",
+  "invoice",
+  "purchase-doc",
+  "journal-entry",
+  "warehouses",
+  "stock-move",
+  "fefo",
+  "waste-alerts",
+  "trial-balance",
+  "profit-loss",
+  "aging",
+  "period-close",
+  "users-roles",
+  "settings",
+  "currencies",
+  "system-states",
+]);
+
+const getInitialPage = (): PageId => {
+  const path = window.location.pathname.replace(/^\/+/, "");
+  if (VALID_PAGES.has(path)) {
+    return path as PageId;
+  }
+  const saved = localStorage.getItem("mizan_current_page");
+  if (saved && VALID_PAGES.has(saved)) {
+    return saved as PageId;
+  }
+  return "dashboard";
+};
+
 export const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<PageId>("dashboard");
+  const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
+
+  const setCurrentPage = (page: PageId) => {
+    setCurrentPageState(page);
+    try {
+      localStorage.setItem("mizan_current_page", page);
+      const targetUrl = page === "dashboard" ? "/" : `/${page}`;
+      if (window.location.pathname !== targetUrl) {
+        window.history.pushState({ page }, "", targetUrl);
+      }
+    } catch (e) {
+      console.warn("Navigation state sync warning:", e);
+    }
+  };
+
+  React.useEffect(() => {
+    // تزامن عند تحميل الصفحة لأول مرة لتحديث الرابط في شريط المتصفح
+    const currentUrl = currentPage === "dashboard" ? "/" : `/${currentPage}`;
+    if (window.location.pathname !== currentUrl) {
+      window.history.replaceState({ page: currentPage }, "", currentUrl);
+    }
+
+    // دعم أزرار الرجوع والتقدم في المتصفح (Browser Back/Forward)
+    const handlePopState = () => {
+      const path = window.location.pathname.replace(/^\/+/, "") || "dashboard";
+      if (VALID_PAGES.has(path)) {
+        setCurrentPageState(path as PageId);
+        localStorage.setItem("mizan_current_page", path);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [currentPage]);
 
   const renderScreen = () => {
     switch (currentPage) {
@@ -97,7 +170,9 @@ export const App: React.FC = () => {
       case "reports":
         return <ReportsPage onOpen={(page) => setCurrentPage(page)} />;
       case "settings":
-        return <SettingsPage />;
+        return <SettingsPage onNavigate={setCurrentPage} />;
+      case "currencies":
+        return <CurrenciesPage />;
       case "users-roles":
         return <UsersRolesPage />;
       case "system-states":
