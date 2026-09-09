@@ -67,3 +67,18 @@ Route::prefix('v1/accounting')->group(function () {
     Route::apiResource('cost-centers', \App\Http\Controllers\Api\V1\Accounting\CostCenterController::class);
 });
 
+Route::prefix('v1/products')->group(function () {
+    // 1. وحدات القياس (Units of Measure)
+    Route::apiResource('units-of-measure', \App\Http\Controllers\Api\V1\Products\UnitOfMeasureController::class);
+
+    // 2. تصنيفات الأصناف (Item Categories & Tree)
+    Route::get('categories/tree', [\App\Http\Controllers\Api\V1\Products\ItemCategoryController::class, 'tree']);
+    Route::apiResource('categories', \App\Http\Controllers\Api\V1\Products\ItemCategoryController::class);
+
+    // 3. بطاقة الأصناف والتسعير متعدد الوحدات (Items Master & Multi-UOM & Barcodes)
+    Route::get('items/barcode/{barcode}', [\App\Http\Controllers\Api\V1\Products\ItemController::class, 'findByBarcode']);
+    Route::post('items/{id}/convert-quantity', [\App\Http\Controllers\Api\V1\Products\ItemController::class, 'convertQuantity']);
+    Route::get('items/{id}/price', [\App\Http\Controllers\Api\V1\Products\ItemController::class, 'resolvePrice']);
+    Route::apiResource('items', \App\Http\Controllers\Api\V1\Products\ItemController::class);
+});
+

@@ -45,6 +45,21 @@ class AppServiceProvider extends ServiceProvider
             \App\Domains\Accounting\Repositories\Contracts\JournalEntryRepositoryInterface::class,
             \App\Domains\Accounting\Repositories\Eloquent\JournalEntryRepository::class
         );
+
+        $this->app->bind(
+            \App\Domains\Products\Repositories\Contracts\UnitOfMeasureRepositoryInterface::class,
+            \App\Domains\Products\Repositories\Eloquent\UnitOfMeasureRepository::class
+        );
+
+        $this->app->bind(
+            \App\Domains\Products\Repositories\Contracts\ItemCategoryRepositoryInterface::class,
+            \App\Domains\Products\Repositories\Eloquent\ItemCategoryRepository::class
+        );
+
+        $this->app->bind(
+            \App\Domains\Products\Repositories\Contracts\ItemRepositoryInterface::class,
+            \App\Domains\Products\Repositories\Eloquent\ItemRepository::class
+        );
     }
 
     /**
