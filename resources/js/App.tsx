@@ -67,6 +67,7 @@ const getInitialPage = (): PageId => {
 
 export const App: React.FC = () => {
   const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
 
   const setCurrentPage = (page: PageId) => {
     setCurrentPageState(page);
@@ -116,12 +117,23 @@ export const App: React.FC = () => {
       case "sales":
         return (
           <SalesPage
-            onOpenInvoice={() => setCurrentPage("invoice")}
+            onOpenInvoice={(id) => {
+              setSelectedInvoiceId(id || null);
+              setCurrentPage("invoice");
+            }}
             onOpenPartners={() => setCurrentPage("partners")}
           />
         );
       case "invoice":
-        return <InvoicePage onBack={() => setCurrentPage("sales")} />;
+        return (
+          <InvoicePage
+            invoiceIdToView={selectedInvoiceId}
+            onBack={() => {
+              setSelectedInvoiceId(null);
+              setCurrentPage("sales");
+            }}
+          />
+        );
       case "purchases":
         return (
           <PurchasesPage onOpenDoc={() => setCurrentPage("purchase-doc")} />

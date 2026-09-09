@@ -82,3 +82,15 @@ Route::prefix('v1/products')->group(function () {
     Route::apiResource('items', \App\Http\Controllers\Api\V1\Products\ItemController::class);
 });
 
+Route::prefix('v1/sales')->group(function () {
+    // 1. العملاء (Customers)
+    Route::get('customers/all-active', [\App\Http\Controllers\Api\V1\Sales\CustomerController::class, 'allActive']);
+    Route::apiResource('customers', \App\Http\Controllers\Api\V1\Sales\CustomerController::class);
+
+    // 2. فواتير المبيعات (Sales Invoices & ZATCA Integration)
+    Route::post('invoices/{id}/post', [\App\Http\Controllers\Api\V1\Sales\SalesInvoiceController::class, 'post']);
+    Route::post('invoices/{id}/cancel', [\App\Http\Controllers\Api\V1\Sales\SalesInvoiceController::class, 'cancel']);
+    Route::apiResource('invoices', \App\Http\Controllers\Api\V1\Sales\SalesInvoiceController::class);
+});
+
+

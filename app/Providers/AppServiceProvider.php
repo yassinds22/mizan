@@ -60,6 +60,16 @@ class AppServiceProvider extends ServiceProvider
             \App\Domains\Products\Repositories\Contracts\ItemRepositoryInterface::class,
             \App\Domains\Products\Repositories\Eloquent\ItemRepository::class
         );
+
+        $this->app->bind(
+            \App\Domains\Sales\Repositories\Contracts\CustomerRepositoryInterface::class,
+            \App\Domains\Sales\Repositories\Eloquent\CustomerRepository::class
+        );
+
+        $this->app->bind(
+            \App\Domains\Sales\Repositories\Contracts\SalesInvoiceRepositoryInterface::class,
+            \App\Domains\Sales\Repositories\Eloquent\SalesInvoiceRepository::class
+        );
     }
 
     /**
