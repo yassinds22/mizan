@@ -10,12 +10,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class SalesInvoiceLine extends Model
+class SalesReturnLine extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'sales_invoice_id',
+        'sales_return_id',
+        'sales_invoice_line_id',
         'item_id',
         'item_unit_id',
         'unit_name',
@@ -24,8 +25,6 @@ class SalesInvoiceLine extends Model
         'base_quantity',
         'unit_price',
         'cost_price',
-        'discount_rate',
-        'discount_amount',
         'tax_rate',
         'tax_amount',
         'subtotal',
@@ -38,17 +37,20 @@ class SalesInvoiceLine extends Model
         'base_quantity' => 'decimal:4',
         'unit_price' => 'decimal:4',
         'cost_price' => 'decimal:4',
-        'discount_rate' => 'decimal:2',
-        'discount_amount' => 'decimal:4',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:4',
         'subtotal' => 'decimal:4',
         'total' => 'decimal:4',
     ];
 
-    public function invoice(): BelongsTo
+    public function salesReturn(): BelongsTo
     {
-        return $this->belongsTo(SalesInvoice::class, 'sales_invoice_id');
+        return $this->belongsTo(SalesReturn::class, 'sales_return_id');
+    }
+
+    public function invoiceLine(): BelongsTo
+    {
+        return $this->belongsTo(SalesInvoiceLine::class, 'sales_invoice_line_id');
     }
 
     public function item(): BelongsTo
@@ -59,10 +61,5 @@ class SalesInvoiceLine extends Model
     public function itemUnit(): BelongsTo
     {
         return $this->belongsTo(ItemUnit::class);
-    }
-
-    public function returnLines(): \Illuminate\Database\Eloquent\Relations\HasMany
-    {
-        return $this->hasMany(SalesReturnLine::class, 'sales_invoice_line_id');
     }
 }

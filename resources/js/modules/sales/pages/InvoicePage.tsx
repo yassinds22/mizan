@@ -30,7 +30,8 @@ import { Modal } from "@/components/ui/Modal";
 import { AlertModal, AlertType } from "@/components/ui/AlertModal";
 import { money } from "@/utils/formatters";
 import { productsApi, Item, ItemUnit } from "@/api/products";
-import { salesApi, Customer, SalesInvoice } from "@/api/sales";
+import { salesApi, Customer, SalesInvoice, SalesReturn } from "@/api/sales";
+import { SalesReturnModal } from "../components/SalesReturnModal";
 
 interface InvoiceLineState {
   id: string;
@@ -153,6 +154,12 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
   const [printFormat, setPrintFormat] = useState<"a4" | "thermal">("a4");
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [currentSavedInvoice, setCurrentSavedInvoice] = useState<SalesInvoice | null>(null);
+
+  // Sales Return / Credit Note States
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [activeSalesReturn, setActiveSalesReturn] = useState<SalesReturn | null>(null);
+  const [showReturnPrintModal, setShowReturnPrintModal] = useState(false);
+  const [returnQrCodeUrl, setReturnQrCodeUrl] = useState<string>("");
 
   // UI status
   const [loading, setLoading] = useState(false);
@@ -811,6 +818,53 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     }
   };
 
+  // Handle successful Sales Return / Credit Note creation
+  const handleReturnSuccess = async (ret: SalesReturn) => {
+    setShowReturnModal(false);
+    setActiveSalesReturn(ret);
+
+    // Generate ZATCA QR for the Credit Note
+    if (ret.zatca_qr_payload) {
+      try {
+        const qrUrl = await QRCode.toDataURL(ret.zatca_qr_payload, {
+          width: 180,
+          margin: 1,
+          color: { dark: "#0f172a", light: "#ffffff" },
+        });
+        setReturnQrCodeUrl(qrUrl);
+      } catch (e) {
+        console.warn("Could not generate QR for return:", e);
+      }
+    }
+
+    showCenterAlert(
+      `تم تسجيل وترحيل إشعار دائن برقم [${ret.return_number}] للمبيعات بنجاح. تم عكس الإيرادات وضريبة المخرجات وتحديث المخزون وتكلفة المبيعات بالقيد المحاسبي رقم #${ret.journal_entry_id || ""}.`,
+      "success",
+      "تم إرجاع الفاتورة واعتماد الإشعار الدائن بنجاح 🎉",
+      `المبلغ المسترد: ${money(ret.total_amount)} شامل ضريبة القيمة المضافة`
+    );
+
+    setShowReturnPrintModal(true);
+
+    // Refresh stock quantities in master items
+    try {
+      const itemsRes = await productsApi.getItems({ per_page: 200, is_active: true });
+      setItems(itemsRes.data || []);
+    } catch (e) {
+      console.warn("Could not reload items stock:", e);
+    }
+
+    // Refresh current invoice data
+    if (currentSavedInvoice?.id) {
+      try {
+        const refreshed = await salesApi.getInvoice(currentSavedInvoice.id);
+        populateInvoice(refreshed);
+      } catch (e) {
+        console.warn("Could not reload invoice:", e);
+      }
+    }
+  };
+
   // Filter items for product picker modal
   const filteredPickerItems = useMemo(() => {
     return items.filter((it) => {
@@ -1014,6 +1068,32 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
               >
                 F4
               </span>
+            </button>
+          )}
+
+          {currentSavedInvoice?.status.value === "posted" && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowReturnModal(true)}
+              title="إنشاء إشعار دائن وإرجاع أصناف الفاتورة للمخزون"
+              style={{
+                height: 40,
+                padding: "0 14px",
+                background: "#fffbeb",
+                color: "#b45309",
+                border: "1px solid #fde68a",
+                fontSize: 13,
+                fontWeight: 800,
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              <RotateCcw size={15} />
+              <span>إرجاع الفاتورة (إشعار دائن)</span>
             </button>
           )}
 
@@ -2293,43 +2373,72 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
 
           {/* Primary Action Button inside Totals Box */}
           {currentSavedInvoice?.status.value === "posted" ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={handleStartNewInvoice}
-              style={{
-                marginTop: 6,
-                height: 48,
-                width: "100%",
-                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
-                color: "#ffffff",
-                fontSize: 14,
-                fontWeight: 900,
-                borderRadius: "var(--radius-sm, 10px)",
-                border: "none",
-                boxShadow: "0 8px 22px rgba(5, 150, 105, 0.35)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Plus size={18} strokeWidth={3} />
-              <span>بدء فاتورة جديدة للعميل التالي</span>
-              <span
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={handleStartNewInvoice}
                 style={{
-                  background: "rgba(255,255,255,0.25)",
-                  padding: "2px 8px",
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontFamily: "monospace",
+                  marginTop: 6,
+                  height: 48,
+                  width: "100%",
+                  background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 900,
+                  borderRadius: "var(--radius-sm, 10px)",
+                  border: "none",
+                  boxShadow: "0 8px 22px rgba(5, 150, 105, 0.35)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
                 }}
               >
-                F4
-              </span>
-            </button>
+                <Plus size={18} strokeWidth={3} />
+                <span>بدء فاتورة جديدة للعميل التالي</span>
+                <span
+                  style={{
+                    background: "rgba(255,255,255,0.25)",
+                    padding: "2px 8px",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                  }}
+                >
+                  F4
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowReturnModal(true)}
+                title="إرجاع أصناف الفاتورة وإصدار إشعار دائن رسمي"
+                style={{
+                  marginTop: 8,
+                  height: 42,
+                  width: "100%",
+                  background: "#fffbeb",
+                  color: "#b45309",
+                  border: "1px solid #fde68a",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  borderRadius: "var(--radius-sm, 10px)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <RotateCcw size={16} />
+                <span>إرجاع الفاتورة (إشعار دائن)</span>
+              </button>
+            </>
           ) : (
             <button
               type="button"
@@ -2774,6 +2883,235 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
             </div>
           </div>
         </div>
+      </Modal>
+
+      {/* 9. Sales Return / Credit Note Modal */}
+      {currentSavedInvoice && (
+        <SalesReturnModal
+          isOpen={showReturnModal}
+          onClose={() => setShowReturnModal(false)}
+          invoiceId={currentSavedInvoice.id}
+          onSuccess={handleReturnSuccess}
+        />
+      )}
+
+      {/* 10. Credit Note Print Preview Modal */}
+      <Modal
+        isOpen={showReturnPrintModal}
+        onClose={() => setShowReturnPrintModal(false)}
+        title={`معاينة طباعة — إشعار دائن ضريبي ${activeSalesReturn?.return_number || ""}`}
+        subtitle="مرتجع مبيعات رسمي معتمد طبقاً لاشتراطات هيئة الزكاة والضريبة والجمارك (ZATCA)"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-ghost" onClick={() => setShowReturnPrintModal(false)}>
+              إغلاق
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => window.print()}
+              style={{ background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))" }}
+            >
+              <Printer size={15} /> طباعة الإشعار الآن
+            </button>
+          </div>
+        }
+      >
+        {activeSalesReturn && (
+          <div>
+            <div
+              className="print-container"
+              style={{
+                maxWidth: "100%",
+                margin: "0 auto",
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                padding: "24px",
+                borderRadius: 8,
+                boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+                color: "#0f172a",
+              }}
+            >
+              {/* Header */}
+              <div style={{ textAlign: "center", marginBottom: 16 }}>
+                <h2 style={{ fontSize: 19, fontWeight: 900, margin: 0 }}>
+                  {companySettings.company_name}
+                </h2>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                  {companySettings.address} · هاتف: {companySettings.phone}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    marginTop: 6,
+                    background: "#fffbeb",
+                    color: "#b45309",
+                    padding: "4px 10px",
+                    borderRadius: 4,
+                    display: "inline-block",
+                    border: "1px solid #fde68a",
+                  }}
+                >
+                  إشعار دائن ضريبي (Tax Credit Note)
+                </div>
+              </div>
+
+              {/* Meta Info Grid */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                  fontSize: 12,
+                  marginBottom: 16,
+                  padding: "10px 12px",
+                  background: "#f8fafc",
+                  borderRadius: 6,
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <div>
+                  <strong>رقم الإشعار: </strong>
+                  <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
+                    {activeSalesReturn.return_number}
+                  </span>
+                </div>
+                <div>
+                  <strong>تاريخ الإرجاع: </strong>
+                  <span>{activeSalesReturn.return_date}</span>
+                </div>
+                <div>
+                  <strong>مرجع الفاتورة الأصلية: </strong>
+                  <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
+                    #{activeSalesReturn.original_invoice_number || currentSavedInvoice?.invoice_number || ""}
+                  </span>
+                </div>
+                <div>
+                  <strong>طريقة الاسترداد: </strong>
+                  <span>{activeSalesReturn.refund_method?.label || "نقداً"}</span>
+                </div>
+                <div>
+                  <strong>العميل: </strong>
+                  <span>{activeSalesReturn.customer_name || currentSavedInvoice?.customer_name || "عميل عام"}</span>
+                </div>
+                {activeSalesReturn.reason && (
+                  <div>
+                    <strong>سبب الإرجاع: </strong>
+                    <span>{activeSalesReturn.reason}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #cbd5e1" }}>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>الصنف</th>
+                    <th style={{ padding: "6px 8px", textAlign: "center" }}>الكمية المرتجعة</th>
+                    <th style={{ padding: "6px 8px", textAlign: "left" }}>سعر الوحدة</th>
+                    <th style={{ padding: "6px 8px", textAlign: "left" }}>الضريبة 15%</th>
+                    <th style={{ padding: "6px 8px", textAlign: "left" }}>الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeSalesReturn.lines?.map((line, idx) => (
+                    <tr key={idx} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                      <td style={{ padding: "6px 8px" }}>
+                        <div style={{ fontWeight: 700 }}>{line.item_name_ar || `صنف #${line.item_id}`}</div>
+                        {line.item_sku && (
+                          <span style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace" }}>
+                            {line.item_sku}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 800 }}>
+                        {line.quantity} {line.unit_name}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "left", fontFamily: "monospace" }}>
+                        {money(line.unit_price)}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "left", fontFamily: "monospace", color: "#0284c7" }}>
+                        {money(line.tax_amount)}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "left", fontFamily: "monospace", fontWeight: 700 }}>
+                        {money(line.total)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Totals Summary */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  fontSize: 13,
+                  borderTop: "1px dashed #cbd5e1",
+                  paddingTop: 10,
+                  marginBottom: 16,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "#64748b" }}>المجموع قبل الضريبة:</span>
+                  <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
+                    {money(activeSalesReturn.subtotal)}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "#64748b" }}>ضريبة القيمة المضافة (15%):</span>
+                  <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#0284c7" }}>
+                    {money(activeSalesReturn.tax_amount)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 15,
+                    fontWeight: 900,
+                    color: "#b45309",
+                    background: "#fffbeb",
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    border: "1px solid #fde68a",
+                  }}
+                >
+                  <span>إجمالي المبلغ المسترد:</span>
+                  <span style={{ fontFamily: "monospace" }}>{money(activeSalesReturn.total_amount)}</span>
+                </div>
+              </div>
+
+              {/* ZATCA QR Code */}
+              <div style={{ textAlign: "center", marginTop: 10 }}>
+                {returnQrCodeUrl ? (
+                  <img
+                    src={returnQrCodeUrl}
+                    alt="ZATCA QR Code"
+                    style={{
+                      width: 120,
+                      height: 120,
+                      margin: "0 auto",
+                    }}
+                  />
+                ) : (
+                  <div style={{ fontSize: 11, color: "#64748b" }}>رمز ZATCA الإلكتروني</div>
+                )}
+                <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
+                  إشعار دائن صادر طبقاً لاشتراطات هيئة الزكاة والضريبة والجمارك (الفاتورة الإلكترونية)
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Center Screen Luxury Alert Modal */}

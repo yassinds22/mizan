@@ -95,6 +95,11 @@ Route::prefix('v1/sales')->group(function () {
     Route::post('invoices/{id}/post', [\App\Http\Controllers\Api\V1\Sales\SalesInvoiceController::class, 'post']);
     Route::post('invoices/{id}/cancel', [\App\Http\Controllers\Api\V1\Sales\SalesInvoiceController::class, 'cancel']);
     Route::apiResource('invoices', \App\Http\Controllers\Api\V1\Sales\SalesInvoiceController::class);
+
+    // 3. مرتجعات المبيعات والإشعارات الدائنة (Sales Returns & Credit Notes)
+    Route::get('invoices/{id}/returnable-lines', [\App\Http\Controllers\Api\V1\Sales\SalesReturnController::class, 'returnableLines']);
+    Route::post('returns', [\App\Http\Controllers\Api\V1\Sales\SalesReturnController::class, 'store']);
+    Route::get('returns/{id}', [\App\Http\Controllers\Api\V1\Sales\SalesReturnController::class, 'show']);
 });
 
 

@@ -96,6 +96,87 @@ export interface CreateInvoicePayload {
   }[];
 }
 
+export interface ReturnableLine {
+  sales_invoice_line_id: number;
+  item_id: number;
+  item_name_ar: string;
+  item_sku: string;
+  unit_name: string;
+  conversion_factor: number;
+  original_quantity: number;
+  already_returned_quantity: number;
+  remaining_quantity: number;
+  unit_price: number;
+  cost_price: number;
+  tax_rate: number;
+}
+
+export interface ReturnableInvoiceData {
+  invoice_id: number;
+  invoice_number: string;
+  invoice_date: string;
+  customer_id?: number | null;
+  customer_name?: string;
+  payment_method: string;
+  lines: ReturnableLine[];
+}
+
+export interface CreateSalesReturnPayload {
+  sales_invoice_id: number;
+  return_date?: string;
+  refund_method: 'cash' | 'credit' | 'bank_transfer';
+  reason?: string;
+  lines: {
+    sales_invoice_line_id: number;
+    quantity: number;
+  }[];
+}
+
+export interface SalesReturnLine {
+  id: number;
+  sales_invoice_line_id: number;
+  item_id: number;
+  item_name_ar?: string;
+  item_sku?: string;
+  unit_name: string;
+  conversion_factor: number;
+  quantity: number;
+  base_quantity: number;
+  unit_price: number;
+  cost_price: number;
+  tax_rate: number;
+  tax_amount: number;
+  subtotal: number;
+  total: number;
+}
+
+export interface SalesReturn {
+  id: number;
+  return_number: string;
+  sales_invoice_id: number;
+  original_invoice_number?: string;
+  return_date: string;
+  branch_id: number;
+  branch_name?: string;
+  customer_id?: number | null;
+  customer_name?: string;
+  refund_method: {
+    value: 'cash' | 'credit' | 'bank_transfer';
+    label: string;
+  };
+  status: string;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  reason?: string;
+  journal_entry_id?: number | null;
+  journal_entry_number?: string;
+  zatca_qr_payload?: string;
+  posted_at?: string;
+  created_at?: string;
+  lines: SalesReturnLine[];
+}
+
 const API_BASE = '/api/v1/sales';
 
 export const salesApi = {
@@ -207,6 +288,35 @@ export const salesApi = {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.message || 'فشل إلغاء الفاتورة');
+    return json.data;
+  },
+
+  // 3. Sales Returns & Credit Notes
+  async getReturnableLines(invoiceId: number): Promise<ReturnableInvoiceData> {
+    const res = await fetch(`${API_BASE}/invoices/${invoiceId}/returnable-lines`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل جلب الأصناف المتاحة للإرجاع');
+    return json.data;
+  },
+
+  async createSalesReturn(payload: CreateSalesReturnPayload): Promise<SalesReturn> {
+    const res = await fetch(`${API_BASE}/returns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل ترحيل مرتجع المبيعات';
+      throw new Error(msg);
+    }
+    return json.data;
+  },
+
+  async getSalesReturn(id: number): Promise<SalesReturn> {
+    const res = await fetch(`${API_BASE}/returns/${id}`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل جلب بيانات المرتجع');
     return json.data;
   },
 };
