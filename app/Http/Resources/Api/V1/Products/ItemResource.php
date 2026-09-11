@@ -53,6 +53,7 @@ class ItemResource extends JsonResource
             'shelf_life_days' => $this->shelf_life_days,
             'reorder_level' => (float) $this->reorder_level,
             'cost_price' => (float) $this->cost_price,
+            'stock_quantity' => (float) ($this->stock_quantity ?? 0.0),
             'is_active' => $this->is_active,
             'units' => ItemUnitResource::collection($this->whenLoaded('itemUnits')),
             'created_at' => $this->created_at?->toIso8601String(),

@@ -35,6 +35,7 @@ class Item extends Model
         'shelf_life_days',
         'reorder_level',
         'cost_price',
+        'stock_quantity',
         'is_active',
         'description',
     ];
@@ -45,6 +46,7 @@ class Item extends Model
         'shelf_life_days' => 'integer',
         'reorder_level' => 'string',
         'cost_price' => 'string',
+        'stock_quantity' => 'string',
         'is_active' => 'boolean',
     ];
 

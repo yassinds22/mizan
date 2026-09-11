@@ -31,6 +31,7 @@ class StoreItemRequest extends FormRequest
             'shelf_life_days' => ['nullable', 'integer', 'min:1'],
             'reorder_level' => ['nullable', 'numeric', 'min:0'],
             'cost_price' => ['nullable', 'numeric', 'min:0'],
+            'stock_quantity' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
 
             // Multi-UOM packaging

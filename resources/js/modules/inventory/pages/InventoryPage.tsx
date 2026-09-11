@@ -101,6 +101,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
   const [formShelfLifeDays, setFormShelfLifeDays] = useState<number | "">("");
   const [formReorderLevel, setFormReorderLevel] = useState<number>(10);
   const [formCostPrice, setFormCostPrice] = useState<number>(0);
+  const [formStockQuantity, setFormStockQuantity] = useState<number>(0);
 
   // Packaging Units Form State
   const [formUnits, setFormUnits] = useState<
@@ -197,6 +198,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
     setFormShelfLifeDays(365);
     setFormReorderLevel(10);
     setFormCostPrice(0);
+    setFormStockQuantity(0);
 
     // Initial Base Unit
     if (baseUom) {
@@ -233,6 +235,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
     setFormShelfLifeDays(item.shelf_life_days || "");
     setFormReorderLevel(item.reorder_level);
     setFormCostPrice(item.cost_price);
+    setFormStockQuantity(Number(item.stock_quantity ?? 0));
 
     // Map existing units & prices
     const mappedUnits = (item.units || []).map((u) => {
@@ -319,6 +322,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
         shelf_life_days: formShelfLifeDays ? Number(formShelfLifeDays) : undefined,
         reorder_level: Number(formReorderLevel) || 0,
         cost_price: Number(formCostPrice) || 0,
+        stock_quantity: Number(formStockQuantity) || 0,
         units: formattedUnits,
       };
 
@@ -667,6 +671,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
                 <th>اسم الصنف الغذائي</th>
                 <th>التصنيف</th>
                 <th>شرط التخزين</th>
+                <th>رصيد المخزون المتوفر</th>
                 <th>وحدات القياس والتعبئة (Multi-UOM)</th>
                 <th>سعر التكلفة</th>
                 <th>أسعار البيع</th>
@@ -771,6 +776,44 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
                           {storageInfo.icon}
                           {storageInfo.label}
                         </span>
+                      </td>
+
+                      {/* Available Stock Quantity */}
+                      <td>
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "4px 10px",
+                            borderRadius: 6,
+                            background:
+                              (item.stock_quantity ?? 0) > (item.reorder_level || 0)
+                                ? "#f0fdf4"
+                                : (item.stock_quantity ?? 0) > 0
+                                ? "#fefce8"
+                                : "#fef2f2",
+                            border: `1px solid ${
+                              (item.stock_quantity ?? 0) > (item.reorder_level || 0)
+                                ? "#bbf7d0"
+                                : (item.stock_quantity ?? 0) > 0
+                                ? "#fef08a"
+                                : "#fecaca"
+                            }`,
+                            color:
+                              (item.stock_quantity ?? 0) > (item.reorder_level || 0)
+                                ? "#166534"
+                                : (item.stock_quantity ?? 0) > 0
+                                ? "#854d0e"
+                                : "#991b1b",
+                            fontWeight: 800,
+                            fontSize: 12,
+                          }}
+                        >
+                          <Box size={14} />
+                          <span>{Number(item.stock_quantity ?? 0).toLocaleString()}</span>
+                          <span style={{ fontSize: 10, fontWeight: 600 }}>{item.base_uom?.name_ar || "حبة"}</span>
+                        </div>
                       </td>
 
                       {/* Multi-UOM Units */}
@@ -1090,6 +1133,19 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
                       min={0}
                       value={formCostPrice}
                       onChange={(e) => setFormCostPrice(Number(e.target.value))}
+                    />
+                  </label>
+
+                  <label className="label" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "8px 12px", borderRadius: 8 }}>
+                    <span style={{ fontWeight: 800, color: "#166534" }}>الكمية الافتتاحية للمخزون (رصيد أول المدة) *</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={formStockQuantity}
+                      onChange={(e) => setFormStockQuantity(Math.max(0, Number(e.target.value) || 0))}
+                      placeholder="0.00"
+                      style={{ fontWeight: 800, color: "#14532d", background: "#ffffff" }}
                     />
                   </label>
 

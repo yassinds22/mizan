@@ -97,7 +97,7 @@ class SalesInvoiceService
             $discountTotal = '0.0000';
             $taxTotal = '0.0000';
 
-            foreach ($rawLines as $line) {
+            foreach ($rawLines as $index => $line) {
                 $itemId = (int) ($line['item_id'] ?? 0);
                 $item = Item::with('category')->find($itemId);
                 if (!$item) {
@@ -116,6 +116,17 @@ class SalesInvoiceService
                 $conversionFactor = (float) ($line['conversion_factor'] ?? 1.0);
                 if ($conversionFactor <= 0) $conversionFactor = 1.0;
                 $baseQty = $qty * $conversionFactor;
+
+                // التحقق الإلزامي من توفر رصيد المخزون في الـ Backend
+                $availableStock = (float) ($item->stock_quantity ?? 0.0);
+                if ($baseQty > $availableStock) {
+                    $uName = !empty($line['unit_name']) ? (string) $line['unit_name'] : 'حبة';
+                    $msg = "الكمية المطلوبة للصنف [{$item->name_ar}] ({$qty} {$uName}) تتجاوز رصيد المخزون المتوفر ({$availableStock} في الوحدة الأساسية).";
+                    throw ValidationException::withMessages([
+                        'lines' => [$msg],
+                        "lines.{$index}.quantity" => [$msg],
+                    ]);
+                }
 
                 $unitPrice = (float) ($line['unit_price'] ?? 0);
                 $costPrice = (float) ($line['cost_price'] ?? $item->cost_price);
@@ -321,6 +332,15 @@ class SalesInvoiceService
                 'posted_at' => Carbon::now(),
             ]);
 
+            // تخفيض رصيد المخزون الفعلي للأصناف المباعة
+            foreach ($inv->lines as $line) {
+                $item = Item::lockForUpdate()->find($line->item_id);
+                if ($item) {
+                    $newStock = max(0, (float) bcsub((string) $item->stock_quantity, (string) $line->base_quantity, 4));
+                    $item->update(['stock_quantity' => $newStock]);
+                }
+            }
+
             // إذا كانت الفاتورة آجلة ولديه حساب عميل مسجل، نزيد رصيد مديونيته
             if ($inv->payment_method === PaymentMethod::CREDIT && $inv->customer_id) {
                 $this->customerService->adjustBalance((int) $inv->customer_id, (float) $inv->total_amount);
@@ -344,9 +364,18 @@ class SalesInvoiceService
                 ]);
             }
 
-            // إذا كانت مرحلة، نعكس قيد اليومية
+            // إذا كانت مرحلة، نعكس قيد اليومية ونسترجع رصيد المخزون
             if ($inv->isPosted() && $inv->journal_entry_id) {
                 $this->journalService->reverseEntry($inv->journal_entry_id, $reason, Carbon::now()->toDateString());
+
+                // استرجاع كميات الأصناف إلى رصيد المخزون
+                foreach ($inv->lines as $line) {
+                    $item = Item::lockForUpdate()->find($line->item_id);
+                    if ($item) {
+                        $restoredStock = bcadd((string) $item->stock_quantity, (string) $line->base_quantity, 4);
+                        $item->update(['stock_quantity' => $restoredStock]);
+                    }
+                }
 
                 // إذا كانت آجلة، ننقص رصيد مديونية العميل
                 if ($inv->payment_method === PaymentMethod::CREDIT && $inv->customer_id) {

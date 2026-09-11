@@ -729,6 +729,24 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       return;
     }
 
+    // Frontend Stock Availability Validation
+    for (const l of lines) {
+      const matchedItem = items.find((it) => it.id === l.item_id);
+      if (matchedItem) {
+        const availableStock = Number(matchedItem.stock_quantity ?? 0);
+        const reqBaseQty = Number(l.quantity || 0) * Number(l.conversion_factor || 1);
+        if (reqBaseQty > availableStock) {
+          showCenterAlert(
+            `الكمية المطلوبة للصنف [${matchedItem.name_ar}] (${l.quantity} ${l.unit_name}) تتجاوز رصيد المخزون المتوفر (${availableStock} في الوحدة الأساسية).`,
+            "error",
+            "رصيد المخزون غير كافٍ ⚠️",
+            `الرصيد المتاح حالياً في المستودع لهذا الصنف هو (${availableStock}) فقط. يرجى تخفيض الكمية المطلوبة لتتناسب مع الرصيد المتاح.`
+          );
+          return;
+        }
+      }
+    }
+
     setSubmitting(true);
     try {
       const payload = {
@@ -1632,6 +1650,44 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
                         </option>
                       ))}
                     </select>
+                    {(() => {
+                      const matchedItem = items.find((it) => it.id === line.item_id);
+                      const availableStock = matchedItem ? Number(matchedItem.stock_quantity ?? 0) : 0;
+                      const baseQty = Number(line.quantity || 0) * Number(line.conversion_factor || 1);
+                      const isOverStock = baseQty > availableStock;
+
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: isOverStock ? "var(--danger, #dc2626)" : availableStock > 0 ? "var(--brand, #166534)" : "var(--muted, #64748b)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <Boxes size={12} />
+                            المخزون المتوفر: <strong>{availableStock.toLocaleString()}</strong>
+                          </span>
+                          {isOverStock && (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: "#b91c1c",
+                                background: "#fee2e2",
+                                padding: "1px 6px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              ⚠️ يتجاوز الرصيد!
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Unit Selection */}
@@ -1682,81 +1738,93 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
 
                   {/* Quantity Stepper */}
                   <td style={{ padding: "10px 14px" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        border: "1px solid var(--line, #d5e0d8)",
-                        borderRadius: 8,
-                        overflow: "hidden",
-                        background: "var(--surface, #ffffff)",
-                      }}
-                    >
-                      {currentSavedInvoice?.status.value !== "posted" && (
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(line.id, -1)}
+                    {(() => {
+                      const matchedItem = items.find((it) => it.id === line.item_id);
+                      const availableStock = matchedItem ? Number(matchedItem.stock_quantity ?? 0) : 0;
+                      const baseQty = Number(line.quantity || 0) * Number(line.conversion_factor || 1);
+                      const isOverStock = baseQty > availableStock;
+
+                      return (
+                        <div
                           style={{
-                            width: 30,
-                            height: 36,
-                            border: "none",
-                            background: "var(--surface-2, #f7faf6)",
-                            cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
-                            justifyContent: "center",
-                            color: "var(--ink-soft, #4a5c52)",
+                            border: isOverStock ? "2px solid #ef4444" : "1px solid var(--line, #d5e0d8)",
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            background: isOverStock ? "#fef2f2" : "var(--surface, #ffffff)",
+                            transition: "all 0.15s ease",
                           }}
                         >
-                          <Minus size={13} />
-                        </button>
-                      )}
+                          {currentSavedInvoice?.status.value !== "posted" && (
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(line.id, -1)}
+                              style={{
+                                width: 30,
+                                height: 36,
+                                border: "none",
+                                background: "var(--surface-2, #f7faf6)",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "var(--ink-soft, #4a5c52)",
+                              }}
+                            >
+                              <Minus size={13} />
+                            </button>
+                          )}
 
-                      <input
-                        type="number"
-                        min={0.01}
-                        step="any"
-                        value={line.quantity}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => {
-                          const val = Math.max(0.0001, Number(e.target.value) || 0);
-                          setLines((prev) =>
-                            prev.map((l) => (l.id === line.id ? { ...l, quantity: val } : l))
-                          );
-                        }}
-                        disabled={currentSavedInvoice?.status.value === "posted"}
-                        style={{
-                          width: "100%",
-                          height: 36,
-                          border: "none",
-                          textAlign: "center",
-                          fontSize: 13,
-                          fontWeight: 800,
-                          padding: "0 4px",
-                          outline: "none",
-                        }}
-                      />
+                          <input
+                            type="number"
+                            min={0.01}
+                            step="any"
+                            value={line.quantity}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const val = Math.max(0.0001, Number(e.target.value) || 0);
+                              setLines((prev) =>
+                                prev.map((l) => (l.id === line.id ? { ...l, quantity: val } : l))
+                              );
+                            }}
+                            disabled={currentSavedInvoice?.status.value === "posted"}
+                            style={{
+                              width: "100%",
+                              height: 36,
+                              border: "none",
+                              textAlign: "center",
+                              fontSize: 13,
+                              fontWeight: 800,
+                              padding: "0 4px",
+                              outline: "none",
+                              color: isOverStock ? "#b91c1c" : "inherit",
+                              background: "transparent",
+                            }}
+                          />
 
-                      {currentSavedInvoice?.status.value !== "posted" && (
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(line.id, 1)}
-                          style={{
-                            width: 30,
-                            height: 36,
-                            border: "none",
-                            background: "var(--surface-2, #f7faf6)",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "var(--ink-soft, #4a5c52)",
-                          }}
-                        >
-                          <Plus size={13} />
-                        </button>
-                      )}
-                    </div>
+                          {currentSavedInvoice?.status.value !== "posted" && (
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(line.id, 1)}
+                              style={{
+                                width: 30,
+                                height: 36,
+                                border: "none",
+                                background: "var(--surface-2, #f7faf6)",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "var(--ink-soft, #4a5c52)",
+                              }}
+                            >
+                              <Plus size={13} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Unit Price */}

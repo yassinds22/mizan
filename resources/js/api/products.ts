@@ -73,6 +73,7 @@ export interface Item {
   shelf_life_days?: number;
   reorder_level: number;
   cost_price: number;
+  stock_quantity?: number;
   is_active: boolean;
   units: ItemUnit[];
   created_at?: string;
@@ -91,6 +92,7 @@ export interface CreateItemPayload {
   shelf_life_days?: number;
   reorder_level?: number;
   cost_price?: number;
+  stock_quantity?: number;
   is_active?: boolean;
   units?: {
     uom_id: number;
