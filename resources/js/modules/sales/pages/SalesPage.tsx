@@ -615,7 +615,7 @@ export const SalesPage: React.FC<SalesPageProps> = ({
         isOpen={showReturnPrintModal}
         onClose={() => setShowReturnPrintModal(false)}
         title={`معاينة طباعة — إشعار دائن ضريبي ${activeSalesReturn?.return_number || ""}`}
-        subtitle="مرتجع مبيعات رسمي معتمد طبقاً لاشتراطات هيئة الزكاة والضريبة والجمارك (ZATCA)"
+        subtitle="مستند مردودات مبيعات — إشعار دائن ضريبي (Credit Note)"
         footer={
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn btn-ghost" onClick={() => setShowReturnPrintModal(false)}>
@@ -816,7 +816,7 @@ export const SalesPage: React.FC<SalesPageProps> = ({
                   <div style={{ fontSize: 11, color: "#64748b" }}>رمز ZATCA الإلكتروني</div>
                 )}
                 <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
-                  إشعار دائن صادر طبقاً لاشتراطات هيئة الزكاة والضريبة والجمارك (الفاتورة الإلكترونية)
+                  إشعار دائن صادر عن نظام ميزان المحاسبي
                 </div>
               </div>
             </div>
