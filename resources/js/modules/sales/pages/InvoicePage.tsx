@@ -40,7 +40,7 @@ interface InvoiceLineState {
   item_unit_id: number | null;
   unit_name: string;
   conversion_factor: number;
-  quantity: number;
+  quantity: number | "";
   unit_price: number;
   cost_price: number;
   discount_rate: number;
@@ -497,7 +497,8 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     setLines((prev) =>
       prev.map((l) => {
         if (l.id !== lineId) return l;
-        const newQty = Math.max(0.1, Number((l.quantity + delta).toFixed(2)));
+        const current = Number(l.quantity) || 1;
+        const newQty = Math.max(1, Math.round((current + delta) * 100) / 100);
         return { ...l, quantity: newQty };
       })
     );
@@ -637,10 +638,11 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     let totalQuantity = 0;
 
     const lineCalculations = lines.map((l) => {
-      const lineSubtotal = l.quantity * l.unit_price;
-      const lineDiscount = lineSubtotal * (l.discount_rate / 100);
+      const qtyNum = Number(l.quantity) || 0;
+      const lineSubtotal = qtyNum * (Number(l.unit_price) || 0);
+      const lineDiscount = lineSubtotal * ((Number(l.discount_rate) || 0) / 100);
       const taxable = Math.max(0, lineSubtotal - lineDiscount);
-      const lineTax = taxable * (l.tax_rate / 100);
+      const lineTax = taxable * ((Number(l.tax_rate) || 0) / 100);
       const lineTotal = taxable + lineTax;
 
       subtotal += lineSubtotal;
@@ -765,7 +767,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           item_unit_id: l.item_unit_id || undefined,
           unit_name: l.unit_name,
           conversion_factor: l.conversion_factor,
-          quantity: l.quantity,
+          quantity: Number(l.quantity) || 1,
           unit_price: l.unit_price,
           cost_price: l.cost_price,
           discount_rate: l.discount_rate,
@@ -1778,14 +1780,38 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
 
                           <input
                             type="number"
-                            min={0.01}
+                            min={1}
                             step="any"
-                            value={line.quantity}
+                            value={line.quantity === 0 ? "" : line.quantity}
+                            placeholder="1"
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => {
-                              const val = Math.max(0.0001, Number(e.target.value) || 0);
+                              const raw = e.target.value;
+                              if (raw === "") {
+                                setLines((prev) =>
+                                  prev.map((l) => (l.id === line.id ? { ...l, quantity: "" } : l))
+                                );
+                                return;
+                              }
+                              const val = parseFloat(raw);
                               setLines((prev) =>
-                                prev.map((l) => (l.id === line.id ? { ...l, quantity: val } : l))
+                                prev.map((l) =>
+                                  l.id === line.id
+                                    ? { ...l, quantity: isNaN(val) ? "" : val }
+                                    : l
+                                )
+                              );
+                            }}
+                            onBlur={() => {
+                              setLines((prev) =>
+                                prev.map((l) => {
+                                  if (l.id !== line.id) return l;
+                                  const num = Number(l.quantity);
+                                  return {
+                                    ...l,
+                                    quantity: !l.quantity || isNaN(num) || num <= 0 ? 1 : num,
+                                  };
+                                })
                               );
                             }}
                             disabled={currentSavedInvoice?.status.value === "posted"}
