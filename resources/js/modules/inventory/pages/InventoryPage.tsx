@@ -106,6 +106,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
   // Packaging Units Form State
   const [formUnits, setFormUnits] = useState<
     {
+      id?: number;
       uom_id: number;
       conversion_factor: number;
       barcode: string;
@@ -239,9 +240,16 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
 
     // Map existing units & prices
     const mappedUnits = (item.units || []).map((u) => {
-      const retail = u.prices?.find((p) => p.price_tier.value === "retail")?.price || 0;
-      const wholesale = u.prices?.find((p) => p.price_tier.value === "wholesale")?.price || 0;
+      const retail = u.prices?.find((p) => {
+        const val = typeof p.price_tier === "object" ? (p.price_tier as any)?.value : p.price_tier;
+        return val === "retail";
+      })?.price || 0;
+      const wholesale = u.prices?.find((p) => {
+        const val = typeof p.price_tier === "object" ? (p.price_tier as any)?.value : p.price_tier;
+        return val === "wholesale";
+      })?.price || 0;
       return {
+        id: u.id,
         uom_id: u.uom_id,
         conversion_factor: u.conversion_factor,
         barcode: u.barcode || "",
@@ -295,20 +303,30 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
 
     try {
       // Build units and nested prices
-      const formattedUnits = formUnits.map((u) => ({
-        uom_id: u.uom_id,
-        conversion_factor: Number(u.conversion_factor) || 1,
-        barcode: u.barcode.trim() || undefined,
-        is_base_unit: u.is_base_unit,
-        prices: [
-          ...(u.retail_price > 0
-            ? [{ price_tier: "retail", price: Number(u.retail_price), min_quantity: 1 }]
-            : []),
-          ...(u.wholesale_price > 0
-            ? [{ price_tier: "wholesale", price: Number(u.wholesale_price), min_quantity: 1 }]
-            : []),
-        ],
-      }));
+      const formattedUnits = formUnits.map((u) => {
+        const rowPrices: { id?: number; price_tier: string; price: number; min_quantity: number }[] = [];
+
+        rowPrices.push({
+          price_tier: "retail",
+          price: Number(u.retail_price) > 0 ? Number(u.retail_price) : 0,
+          min_quantity: 1,
+        });
+
+        rowPrices.push({
+          price_tier: "wholesale",
+          price: Number(u.wholesale_price) > 0 ? Number(u.wholesale_price) : 0,
+          min_quantity: 1,
+        });
+
+        return {
+          id: u.id,
+          uom_id: u.uom_id,
+          conversion_factor: Number(u.conversion_factor) || 1,
+          barcode: u.barcode.trim() || undefined,
+          is_base_unit: u.is_base_unit,
+          prices: rowPrices,
+        };
+      });
 
       const payload: CreateItemPayload = {
         sku: formSku.trim().toUpperCase(),
@@ -849,17 +867,26 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onOpenItem }) => {
 
                       {/* Selling Prices (from Base Unit or First Unit) */}
                       <td>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                          {item.units?.[0]?.prices?.map((p) => (
-                            <div key={p.id} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
-                              <span style={{ color: "#64748b" }}>{p.price_tier.label}:</span>
-                              <strong className="amount">{money(p.price)}</strong>
+                        {(() => {
+                          const baseUnit = item.units?.find((u) => u.is_base_unit) || item.units?.[0];
+                          const prices = baseUnit?.prices || [];
+                          if (prices.length === 0) {
+                            return <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>;
+                          }
+                          return (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              {prices.map((p, pIdx) => {
+                                const label = typeof p.price_tier === "object" ? (p.price_tier as any)?.label : p.price_tier;
+                                return (
+                                  <div key={p.id || pIdx} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                                    <span style={{ color: "#64748b" }}>{label || "سعر"}:</span>
+                                    <strong className="amount">{money(p.price)}</strong>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                          {(!item.units?.[0]?.prices || item.units[0].prices.length === 0) && (
-                            <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>
-                          )}
-                        </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Reorder Level */}

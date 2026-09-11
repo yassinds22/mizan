@@ -244,4 +244,85 @@ class ItemApiTest extends TestCase
             ->assertJsonPath('original_quantity', 5)
             ->assertJsonPath('converted_quantity', 50);
     }
+
+    public function test_can_update_item_retail_and_wholesale_prices_via_api(): void
+    {
+        // 1. إنشاء صنف مع أسعار ابتدائية
+        $createRes = $this->postJson('/api/v1/products/items', [
+            'sku' => 'TEST-PRICE-01',
+            'name_ar' => 'منتج اختبار السعر',
+            'category_id' => $this->category->id,
+            'base_uom_id' => $this->piece->id,
+            'storage_condition' => StorageCondition::Ambient->value,
+            'cost_price' => 10.0,
+            'units' => [
+                [
+                    'uom_id' => $this->piece->id,
+                    'conversion_factor' => 1.0,
+                    'is_base_unit' => true,
+                    'prices' => [
+                        ['price_tier' => PriceTier::Retail->value, 'price' => 15.0],
+                        ['price_tier' => PriceTier::Wholesale->value, 'price' => 12.0],
+                    ],
+                ],
+                [
+                    'uom_id' => $this->carton->id,
+                    'conversion_factor' => 10.0,
+                    'is_base_unit' => false,
+                    'prices' => [
+                        ['price_tier' => PriceTier::Retail->value, 'price' => 140.0],
+                        ['price_tier' => PriceTier::Wholesale->value, 'price' => 110.0],
+                    ],
+                ],
+            ],
+        ]);
+
+        $createRes->assertCreated();
+        $itemId = $createRes->json('data.id');
+
+        // 2. تحديث الأسعار (مثل السيناريو الذي بالصورة: الحبة 20 تجزئة و20 جملة، والشدة 2200 تجزئة و200 جملة)
+        $updateRes = $this->putJson("/api/v1/products/items/{$itemId}", [
+            'name_ar' => 'منتج اختبار السعر محدث',
+            'category_id' => $this->category->id,
+            'base_uom_id' => $this->piece->id,
+            'storage_condition' => StorageCondition::Ambient->value,
+            'units' => [
+                [
+                    'uom_id' => $this->piece->id,
+                    'conversion_factor' => 1.0,
+                    'is_base_unit' => true,
+                    'prices' => [
+                        ['price_tier' => 'retail', 'price' => 20.0],
+                        ['price_tier' => 'wholesale', 'price' => 20.0],
+                    ],
+                ],
+                [
+                    'uom_id' => $this->carton->id,
+                    'conversion_factor' => 5.0,
+                    'is_base_unit' => false,
+                    'prices' => [
+                        ['price_tier' => 'retail', 'price' => 2200.0],
+                        ['price_tier' => 'wholesale', 'price' => 200.0],
+                    ],
+                ],
+            ],
+        ]);
+
+        $updateRes->assertOk();
+
+        // 3. التحقق من تحديث الأسعار في قاعدة البيانات
+        $item = Item::with(['itemUnits.prices'])->find($itemId);
+        $pieceUnit = $item->itemUnits->firstWhere('uom_id', $this->piece->id);
+        $cartonUnit = $item->itemUnits->firstWhere('uom_id', $this->carton->id);
+
+        $pieceRetail = $pieceUnit->prices->firstWhere('price_tier', PriceTier::Retail);
+        $pieceWholesale = $pieceUnit->prices->firstWhere('price_tier', PriceTier::Wholesale);
+        $cartonRetail = $cartonUnit->prices->firstWhere('price_tier', PriceTier::Retail);
+        $cartonWholesale = $cartonUnit->prices->firstWhere('price_tier', PriceTier::Wholesale);
+
+        $this->assertEquals(20.0, (float) $pieceRetail->price);
+        $this->assertEquals(20.0, (float) $pieceWholesale->price);
+        $this->assertEquals(2200.0, (float) $cartonRetail->price);
+        $this->assertEquals(200.0, (float) $cartonWholesale->price);
+    }
 }

@@ -95,11 +95,13 @@ export interface CreateItemPayload {
   stock_quantity?: number;
   is_active?: boolean;
   units?: {
+    id?: number;
     uom_id: number;
     conversion_factor: number;
     barcode?: string;
     is_base_unit?: boolean;
     prices?: {
+      id?: number;
       price_tier: string;
       price: number;
       min_quantity?: number;

@@ -191,6 +191,7 @@ class ItemService
             $updatedItem = $this->itemRepository->update($item, $itemData);
 
             // تحديث الوحدات إن تم تمريرها
+            $unitMap = [];
             if ($units !== null) {
                 $existingUnitIds = $item->itemUnits->pluck('id')->toArray();
                 $processedUnitIds = [];
@@ -213,6 +214,11 @@ class ItemService
                     );
 
                     $processedUnitIds[] = $itemUnit->id;
+                    $unitMap[$uomId] = $itemUnit;
+                    if (!empty($u['id'])) {
+                        $unitMap['id_' . $u['id']] = $itemUnit;
+                    }
+                    $unitMap['id_' . $itemUnit->id] = $itemUnit;
                 }
 
                 // حذف الوحدات التي أزيلت (بشرط ألا تكون الوحدة الأساسية)
@@ -223,26 +229,49 @@ class ItemService
                         $delUnit->delete();
                     }
                 }
+            } else {
+                foreach ($item->itemUnits as $iu) {
+                    $unitMap[$iu->uom_id] = $iu;
+                    $unitMap['id_' . $iu->id] = $iu;
+                }
             }
 
             // تحديث الأسعار إن تم تمريرها
             if ($prices !== null) {
                 foreach ($prices as $p) {
-                    if (!empty($p['item_unit_id']) && isset($p['price'])) {
+                    $targetUnit = null;
+                    if (!empty($p['item_unit_id'])) {
+                        $targetUnit = $unitMap['id_' . $p['item_unit_id']]
+                            ?? ItemUnit::where('item_id', $updatedItem->id)->where('id', (int) $p['item_unit_id'])->first();
+                    }
+                    if (!$targetUnit && !empty($p['uom_id'])) {
+                        $targetUnit = $unitMap[(int) $p['uom_id']]
+                            ?? ItemUnit::where('item_id', $updatedItem->id)->where('uom_id', (int) $p['uom_id'])->first();
+                    }
+
+                    if ($targetUnit && isset($p['price'])) {
                         $tier = $p['price_tier'] ?? PriceTier::Retail->value;
                         $tierEnum = $tier instanceof PriceTier ? $tier : PriceTier::from((string) $tier);
+                        $numericPrice = (float) $p['price'];
 
-                        ItemPrice::updateOrCreate(
-                            [
-                                'item_unit_id' => (int) $p['item_unit_id'],
-                                'price_tier' => $tierEnum,
-                            ],
-                            [
-                                'price' => (string) $p['price'],
-                                'min_quantity' => (string) ($p['min_quantity'] ?? '1.0000'),
-                                'is_active' => true,
-                            ]
-                        );
+                        if ($numericPrice > 0) {
+                            ItemPrice::updateOrCreate(
+                                [
+                                    'item_unit_id' => $targetUnit->id,
+                                    'price_tier' => $tierEnum,
+                                ],
+                                [
+                                    'price' => (string) $p['price'],
+                                    'min_quantity' => (string) ($p['min_quantity'] ?? '1.0000'),
+                                    'is_active' => true,
+                                ]
+                            );
+                        } else {
+                            // إذا كان السعر 0، يتم حذف الشريحة إن وجدت
+                            ItemPrice::where('item_unit_id', $targetUnit->id)
+                                ->where('price_tier', $tierEnum)
+                                ->delete();
+                        }
                     }
                 }
             }
