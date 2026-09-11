@@ -47,9 +47,13 @@ Route::prefix('v1/core')->group(function () {
     Route::get('tax-categories/{id}/rates', [\App\Http\Controllers\Api\V1\Core\TaxCategoryController::class, 'rates']);
     Route::post('tax-categories/calculate', [\App\Http\Controllers\Api\V1\Core\TaxCategoryController::class, 'calculate']);
 
-    // 5. إعدادات المنشأة والسياسات العامة (Settings CRUD)
+    // 5. إعدادات المنشأة والسياسات العامة وتأسيس وتصفير النظام
     Route::get('settings', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'index']);
     Route::post('settings', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'update']);
+    Route::get('settings/status', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'status']);
+    Route::post('settings/init-client', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'initClient']);
+    Route::get('settings/reset-preview', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'resetPreview']);
+    Route::post('settings/reset-data', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'resetData']);
 });
 
 Route::prefix('v1/accounting')->group(function () {

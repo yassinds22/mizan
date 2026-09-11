@@ -94,7 +94,7 @@ class BranchService
     {
         $branch = $this->getBranchById($id);
 
-        // حماية: منع حذف الفرع إذا كان هو الفرع الوحيد في النظام
+        // 1. حماية: منع حذف الفرع إذا كان هو الفرع الوحيد في النظام
         $totalBranches = $this->branchRepository->all()->count();
         if ($totalBranches <= 1) {
             throw ValidationException::withMessages([
@@ -102,7 +102,33 @@ class BranchService
             ]);
         }
 
-        return $this->branchRepository->delete($branch);
+        // 2. فحص ارتباط الفرع بحركات محاسبية أو فواتير مبيعات أو مراكز تكلفة
+        $journalCount = \Illuminate\Support\Facades\DB::table('journal_entries')->where('branch_id', $id)->count();
+        $invoiceCount = \Illuminate\Support\Facades\DB::table('sales_invoices')->where('branch_id', $id)->count();
+        $costCenterCount = \Illuminate\Support\Facades\DB::table('cost_centers')->where('branch_id', $id)->count();
+
+        if ($journalCount > 0 || $invoiceCount > 0 || $costCenterCount > 0) {
+            $details = [];
+            if ($journalCount > 0) $details[] = "{$journalCount} قيود يومية محاسبية";
+            if ($invoiceCount > 0) $details[] = "{$invoiceCount} فواتير مبيعات";
+            if ($costCenterCount > 0) $details[] = "{$costCenterCount} مراكز تكلفة";
+
+            $detailsStr = implode(' و ', $details);
+
+            throw ValidationException::withMessages([
+                'branch' => [
+                    "لا يمكن حذف هذا الفرع لوجود عمليات مرتبطة به في النظام ({$detailsStr}). لحماية السجلات المالية والضريبية، يمكنك تعطيل الفرع بدلاً من حذفه."
+                ],
+            ]);
+        }
+
+        try {
+            return $this->branchRepository->delete($branch);
+        } catch (\Illuminate\Database\QueryException $e) {
+            throw ValidationException::withMessages([
+                'branch' => ['تعذر حذف الفرع لوجود بيانات وسجلات مرتبطة به. يمكنك تعطيل الفرع لإيقاف استخدامه.'],
+            ]);
+        }
     }
 
     public function toggleBranchStatus(int $id): Branch
