@@ -176,7 +176,14 @@ export const salesApi = {
     });
     const json = await res.json();
     if (!res.ok) {
-      const msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل حفظ الفاتورة';
+      let msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل حفظ الفاتورة';
+      if (msg.toLowerCase().includes('the selected branch id is invalid')) {
+        msg = 'الفرع المحدد في الفاتورة غير مسجل أو لم يعد نشطاً في قاعدة البيانات.';
+      } else if (msg.toLowerCase().includes('the selected customer id is invalid')) {
+        msg = 'العميل المحدد غير موجود في سجلات العملاء النشطين.';
+      } else if (msg.toLowerCase().includes('the lines field is required')) {
+        msg = 'يجب إضافة صنف واحد على الأقل في فاتورة المبيعات.';
+      }
       throw new Error(msg);
     }
     return json.data;

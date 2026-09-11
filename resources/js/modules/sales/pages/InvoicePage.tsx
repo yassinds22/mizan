@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { Modal } from "@/components/ui/Modal";
+import { AlertModal, AlertType } from "@/components/ui/AlertModal";
 import { money } from "@/utils/formatters";
 import { productsApi, Item, ItemUnit } from "@/api/products";
 import { salesApi, Customer, SalesInvoice } from "@/api/sales";
@@ -158,6 +159,80 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: "success" | "info" | "error" } | null>(null);
 
+  // Center Screen Luxury Alert Modal State
+  const [centerAlert, setCenterAlert] = useState<{
+    isOpen: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+    detail?: string;
+  }>({
+    isOpen: false,
+    type: "error",
+    title: "",
+    message: "",
+  });
+
+  const showCenterAlert = (
+    message: string,
+    type: AlertType = "error",
+    customTitle?: string,
+    customDetail?: string
+  ) => {
+    let title = customTitle;
+    let detail = customDetail;
+    let displayMessage = message;
+
+    const lower = (message || "").toLowerCase();
+
+    if (
+      lower.includes("branch id is invalid") ||
+      message.includes("الفرع المحدد") ||
+      lower.includes("branch_id")
+    ) {
+      title = title || "تنبيه في اختيار الفرع / المستودع";
+      displayMessage = "الفرع المحدد في الفاتورة غير مسجل أو لم يعد نشطاً في قاعدة البيانات.";
+      detail =
+        detail ||
+        "تم تصحيح وتحديث اختيار الفرع تلقائياً إلى الفرع المتاح لمنشأتك، يمكنك الآن إعادة المحاولة وحفظ الفاتورة مباشرة.";
+      if (branches.length > 0) {
+        setBranchId(branches[0].id);
+      }
+    } else if (
+      lower.includes("quantity") ||
+      message.includes("الكمية") ||
+      message.includes("كمية")
+    ) {
+      title = title || "تنبيه في كمية الصنف";
+      displayMessage =
+        message.includes("يجب أن تكون") || message.includes("أكبر من الصفر")
+          ? message
+          : "الكمية المطلوبة غير صحيحة أو تتجاوز الرصيد المخزني المتاح.";
+      detail =
+        detail ||
+        "يرجى التحقق من الكمية المدخلة في جدول الفاتورة والتأكد من أنها أكبر من الصفر ومتوفرة في المخزن.";
+    } else if (
+      lower.includes("period") ||
+      message.includes("فترة") ||
+      message.includes("الفترة المالية")
+    ) {
+      title = title || "الفترة المالية مغلقة";
+      displayMessage = "تاريخ الفاتورة يقع خارج الفترات المالية المفتوحة لعام المنشأة.";
+      detail =
+        detail || "يرجى تعديل تاريخ الفاتورة أو فتح الفترة المالية من شاشة الإعدادات العامة.";
+    } else if (!title) {
+      title = type === "error" ? "تعذر حفظ الفاتورة" : "تنبيه من النظام";
+    }
+
+    setCenterAlert({
+      isOpen: true,
+      type,
+      title: title || "تنبيه",
+      message: displayMessage,
+      detail,
+    });
+  };
+
   const showToast = (message: string, type: "success" | "info" | "error" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -239,9 +314,19 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           const bRes = await fetch("/api/v1/core/branches");
           if (bRes.ok) {
             const bJson = await bRes.json();
-            setBranches(bJson.data || []);
-            if (bJson.data?.length && !initialDraft?.branchId) {
-              setBranchId(bJson.data[0].id);
+            const rawBranches = bJson.data || [];
+            const mappedBranches = rawBranches.map((b: any) => ({
+              id: b.id,
+              name: b.name || b.name_ar || `فرع #${b.id}`,
+              name_ar: b.name || b.name_ar || `فرع #${b.id}`,
+            }));
+            setBranches(mappedBranches);
+
+            if (mappedBranches.length > 0) {
+              setBranchId((currentId) => {
+                const exists = mappedBranches.some((b: any) => b.id === currentId);
+                return exists ? currentId : mappedBranches[0].id;
+              });
             }
           }
 
@@ -600,7 +685,18 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
   // Save Invoice (Draft or Posted)
   const handleSaveInvoice = async (postImmediately: boolean) => {
     if (lines.length === 0) {
-      showToast("يرجى إضافة صنف واحد على الأقل في الفاتورة", "error");
+      showCenterAlert("يرجى إضافة صنف واحد على الأقل في الفاتورة للمتابعة.", "warning", "الفاتورة فارغة");
+      return;
+    }
+
+    const invalidQty = lines.find((l) => !l.quantity || Number(l.quantity) <= 0);
+    if (invalidQty) {
+      showCenterAlert(
+        `الكمية المحددة للصنف [${invalidQty.item_name_ar || "صنف"}] غير صالحة. يجب أن تكون الكمية أكبر من الصفر.`,
+        "warning",
+        "تنبيه في كمية الصنف",
+        "يرجى تصحيح الكمية في جدول الفاتورة قبل محاولة الحفظ أو الترحيل."
+      );
       return;
     }
 
@@ -650,7 +746,9 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
         openPrintPreview();
       }, 350);
     } catch (err: any) {
-      showToast(err.message || "حدث خطأ أثناء حفظ الفاتورة", "error");
+      const errMsg = err.message || "حدث خطأ أثناء حفظ الفاتورة";
+      showCenterAlert(errMsg, "error");
+      showToast(errMsg, "error");
     } finally {
       setSubmitting(false);
     }
@@ -1125,7 +1223,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.name_ar}
+                  {b.name_ar || (b as any).name || `فرع #${b.id}`}
                 </option>
               ))}
             </select>
@@ -2473,6 +2571,17 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           </div>
         </div>
       </Modal>
+
+      {/* Center Screen Luxury Alert Modal */}
+      <AlertModal
+        isOpen={centerAlert.isOpen}
+        onClose={() => setCenterAlert((prev) => ({ ...prev, isOpen: false }))}
+        type={centerAlert.type}
+        title={centerAlert.title}
+        message={centerAlert.message}
+        detail={centerAlert.detail}
+        actionText="حسناً، فهمت"
+      />
 
       {/* Floating Toast Notification */}
       {toast && (

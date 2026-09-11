@@ -41,4 +41,25 @@ class StoreSalesInvoiceRequest extends FormRequest
             'lines.*.tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'branch_id.exists' => 'الفرع المحدد غير موجود في النظام أو لم يعد نشطاً.',
+            'customer_id.exists' => 'العميل المحدد غير موجود في سجلات العملاء.',
+            'payment_method.required' => 'طريقة السداد مطلوبة (نقدي / آجل / تحويل بنكي).',
+            'payment_method.in' => 'طريقة السداد المحددة غير صالحة.',
+            'lines.required' => 'يجب إضافة صنف واحد على الأقل في فاتورة المبيعات.',
+            'lines.min' => 'يجب إضافة صنف واحد على الأقل في فاتورة المبيعات.',
+            'lines.*.item_id.required' => 'معرف الصنف مطلوب لكل سطر في الفاتورة.',
+            'lines.*.item_id.exists' => 'أحد الأصناف المحددة غير موجود في المخزون.',
+            'lines.*.quantity.required' => 'الكمية مطلوبة لجميع بنود الفاتورة.',
+            'lines.*.quantity.min' => 'يجب أن تكون كمية الصنف أكبر من الصفر.',
+            'lines.*.unit_price.required' => 'سعر الوحدة مطلوب لكل صنف.',
+            'lines.*.unit_price.min' => 'يجب أن يكون سعر الوحدة صفراً أو أكبر.',
+        ];
+    }
 }
