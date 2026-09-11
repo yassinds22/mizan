@@ -234,6 +234,10 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
   };
 
   const showToast = (message: string, type: "success" | "info" | "error" = "success") => {
+    if (type === "error") {
+      showCenterAlert(message, "error");
+      return;
+    }
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
@@ -737,18 +741,26 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       setIsDraftRestored(false);
 
       if (postImmediately) {
-        showToast(`🎉 تم حفظ وترحيل الفاتورة بنجاح: ${saved.invoice_number}`);
+        showCenterAlert(
+          `تم حفظ واعتماد وترحيل فاتورة المبيعات بنجاح برقم [${saved.invoice_number}]، وتم توليد القيد المحاسبي المتوازن وتشفير رمز ZATCA.`,
+          "success",
+          "تم حفظ وترحيل الفاتورة بنجاح 🎉",
+          `إجمالي المبلغ المطلوب: ${money(saved.total_amount)} شامل ضريبة القيمة المضافة`
+        );
       } else {
-        showToast(`✅ تم حفظ الفاتورة كمسودة برقم: ${saved.invoice_number}`);
+        showCenterAlert(
+          `تم حفظ الفاتورة بنجاح كمسودة برقم [${saved.invoice_number}].`,
+          "info",
+          "تم حفظ المسودة بنجاح ✅"
+        );
       }
 
       setTimeout(() => {
         openPrintPreview();
-      }, 350);
+      }, 500);
     } catch (err: any) {
       const errMsg = err.message || "حدث خطأ أثناء حفظ الفاتورة";
       showCenterAlert(errMsg, "error");
-      showToast(errMsg, "error");
     } finally {
       setSubmitting(false);
     }
@@ -2583,33 +2595,36 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
         actionText="حسناً، فهمت"
       />
 
-      {/* Floating Toast Notification */}
+      {/* Centered Floating Notification Pill */}
       {toast && (
         <div
           style={{
             position: "fixed",
-            bottom: 24,
-            left: 24,
+            top: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
             background:
               toast.type === "error"
-                ? "var(--danger, #b93a3a)"
+                ? "linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)"
                 : toast.type === "info"
-                ? "var(--info, #2a6a8a)"
-                : "var(--brand-deep, #0f3d2e)",
+                ? "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)"
+                : "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
             color: "#ffffff",
-            padding: "12px 20px",
-            borderRadius: 10,
-            fontSize: 13,
-            fontWeight: 700,
-            boxShadow: "0 10px 25px -3px rgba(0, 0, 0, 0.35)",
+            padding: "14px 28px",
+            borderRadius: "50px",
+            fontSize: 14,
+            fontWeight: 800,
+            boxShadow: "0 20px 40px -5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2)",
             zIndex: 9999,
             display: "flex",
             alignItems: "center",
-            gap: 8,
-            animation: "fadeUp 0.2s ease",
+            gap: 10,
+            animation: "centerDrop 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+            direction: "rtl",
+            maxWidth: "90%",
           }}
         >
-          <Sparkles size={16} />
+          <Sparkles size={18} />
           <span>{toast.message}</span>
         </div>
       )}
