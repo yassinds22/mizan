@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import * as LucideIcons from "lucide-react";
 import { PanelRightClose } from "lucide-react";
 import { navGroups } from "@/data/navigation";
+import { coreApi } from "@/api/core";
 import type { PageId } from "@/types/navigation";
 
 interface SidebarProps {
@@ -19,6 +20,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onToggleCollapse,
 }) => {
+  const [branchName, setBranchName] = useState<string>("الفرع الرئيسي");
+  const [companyName, setCompanyName] = useState<string>("ميزان");
+
+  const loadInfo = () => {
+    coreApi
+      .getSettings()
+      .then((s) => {
+        if (s.company_name) setCompanyName(s.company_name);
+      })
+      .catch(() => {});
+
+    coreApi
+      .getBranches({ is_active: true })
+      .then((branches) => {
+        if (branches && branches.length > 0) {
+          const main = branches.find((b) => b.code === "BR-001") || branches[0];
+          setBranchName(main.name);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadInfo();
+    window.addEventListener("mizan_settings_updated", loadInfo);
+    return () => {
+      window.removeEventListener("mizan_settings_updated", loadInfo);
+    };
+  }, []);
   const isNavActive = (id: PageId) => {
     if (currentPage === id) return true;
     if (currentPage === "item-detail" && id === "inventory") return true;
@@ -44,12 +74,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <aside className={`sidebar ${mobileOpen ? "open" : ""}`} aria-label="القائمة الرئيسية">
         <div className="brand">
-          <div className="brand-mark" title="ميزان">
-            م
+          <div className="brand-mark" title={companyName || "ميزان"}>
+            {companyName ? companyName.trim().charAt(0) : "م"}
           </div>
-          <div className="brand-text">
-            <h1>ميزان</h1>
-            <p>ERP محاسبي للمواد الغذائية</p>
+          <div className="brand-text" style={{ minWidth: 0 }}>
+            <h1
+              title={companyName || "ميزان"}
+              style={{
+                margin: 0,
+                fontSize: companyName && companyName.length > 15 ? 14 : 17,
+                fontWeight: 800,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {companyName || "ميزان"}
+            </h1>
+            <p
+              style={{
+                margin: "2px 0 0",
+                fontSize: 11,
+                opacity: 0.75,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              ERP محاسبي للمواد الغذائية
+            </p>
           </div>
           <button
             className="sidebar-collapse-btn desktop-only"
@@ -87,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
 
         <div className="sidebar-foot">
-          <strong>فرع الرياض — المستودع الرئيسي</strong>
+          <strong>{branchName}</strong>
           <span>السنة المالية 2026 · فترة مفتوحة</span>
         </div>
       </aside>

@@ -129,6 +129,17 @@ export const salesApi = {
     return json.data;
   },
 
+  async updateCustomer(id: number, payload: Partial<Customer>): Promise<Customer> {
+    const res = await fetch(`${API_BASE}/customers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل تحديث بيانات العميل');
+    return json.data;
+  },
+
   // 2. Sales Invoices
   async getInvoices(filters: {
     search?: string;

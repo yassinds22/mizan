@@ -16,13 +16,16 @@ import {
   MapPin,
   Clock,
   Lock,
+  ShieldAlert,
 } from "lucide-react";
 import { coreApi, CurrencyApi, BranchApi, FiscalPeriodApi, TaxCategoryApi } from "@/api/core";
 import { BranchManager } from "@/modules/settings/components/BranchManager";
 import { TaxManager } from "@/modules/settings/components/TaxManager";
+import { ClientSetupWizard } from "@/modules/settings/components/ClientSetupWizard";
+import { DataResetModal } from "@/modules/settings/components/DataResetModal";
 import type { PageId } from "@/types/navigation";
 
-type SettingsTab = "company" | "print" | "fiscal" | "branches";
+type SettingsTab = "company" | "print" | "fiscal" | "branches" | "wizard";
 
 interface SettingsPageProps {
   onNavigate?: (page: PageId) => void;
@@ -31,6 +34,7 @@ interface SettingsPageProps {
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("company");
   const [toast, setToast] = useState<string | null>(null);
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
 
   // Core Data from API
   const [currencies, setCurrencies] = useState<CurrencyApi[]>([]);
@@ -164,6 +168,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
       setCurrencies(updatedCurrencies);
 
       setToast(res.message || "تم حفظ كافة الإعدادات والسياسات بنجاح في قاعدة البيانات");
+      window.dispatchEvent(new CustomEvent("mizan_settings_updated"));
     } catch (err: any) {
       const msg = err.response?.data?.message || "حدث خطأ أثناء حفظ الإعدادات";
       setToast(msg);
@@ -188,6 +193,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     { id: "print", label: "قالب وتذييل الفاتورة", icon: <Printer size={16} /> },
     { id: "fiscal", label: "الضريبة والعملات والسياسات", icon: <Scale size={16} /> },
     { id: "branches", label: "الفروع والفترات المالية", icon: <CalendarDays size={16} /> },
+    { id: "wizard", label: "معالج تهيئة منشأة جديدة", icon: <Sparkles size={16} /> },
   ];
 
   return (
@@ -899,6 +905,101 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
           </section>
         </div>
       )}
+
+      {/* ==================== التبويب 5: معالج تهيئة منشأة جديدة ==================== */}
+      {activeTab === "wizard" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <ClientSetupWizard
+            onSuccess={() => {
+              reloadBranches();
+              coreApi.getSettings().then((s) => {
+                if (s.company_name) setCompanyName(s.company_name);
+                if (s.tax_number) setTaxNumber(s.tax_number);
+                if (s.cr_number) setCrNumber(s.cr_number);
+                if (s.city) setCity(s.city);
+                if (s.address) setAddress(s.address);
+              });
+            }}
+            onNotify={(msg) => {
+              setToast(msg);
+              setTimeout(() => setToast(null), 3000);
+            }}
+          />
+
+          {/* منطقة الأمان المتقدمة: تصفير بيانات التشغيل */}
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #fee2e2",
+              borderRadius: 14,
+              padding: "18px 24px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              boxShadow: "0 1px 3px rgba(220,38,38,0.05)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 10,
+                  background: "#fef2f2",
+                  color: "#dc2626",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ShieldAlert size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#991b1b" }}>
+                  منطقة الأمان المتقدمة: تصفير بيانات التشغيل والبدء من جديد
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  تصفير الفواتير والقيود التجريبية مع الاحتفاظ الكامل بشجرة الحسابات والهوية، مع أخذ نسخة احتياطية آلياً
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowResetModal(true)}
+              style={{
+                background: "#fef2f2",
+                color: "#dc2626",
+                border: "1px solid #fecaca",
+                fontSize: 13,
+                fontWeight: 700,
+                padding: "9px 18px",
+                borderRadius: 8,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              فتح نافذة التصفير الآمن...
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة التصفير الآمن المنبثقة */}
+      <DataResetModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        onSuccess={() => {
+          coreApi.getSettings().then((s) => {
+            if (s.company_name) setCompanyName(s.company_name);
+          });
+        }}
+        onNotify={(msg) => {
+          setToast(msg);
+          setTimeout(() => setToast(null), 3000);
+        }}
+      />
 
       {toast && <div className="toast">{toast}</div>}
     </div>

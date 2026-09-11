@@ -260,6 +260,69 @@ export const coreApi = {
     const res = await axios.post<any>("/api/v1/core/settings", payload);
     return res.data;
   },
+
+  getSystemStatus: async (): Promise<{
+    company_name: string;
+    legal_name: string;
+    vat_number: string;
+    commercial_register: string;
+    city: string;
+    address: string;
+    phone: string;
+    setup_completed: boolean;
+    setup_completed_at: string | null;
+  }> => {
+    const res = await axios.get<any>("/api/v1/core/settings/status");
+    return res.data.data || res.data;
+  },
+
+  initClient: async (payload: {
+    company_name: string;
+    legal_name?: string;
+    vat_number?: string;
+    commercial_register?: string;
+    city?: string;
+    address?: string;
+    phone?: string;
+    branch_name?: string;
+    base_currency?: string;
+    vat_rate?: number;
+  }): Promise<{ message: string; data: any; company: any; branch: any; accounting: any }> => {
+    const res = await axios.post<any>("/api/v1/core/settings/init-client", payload);
+    return res.data;
+  },
+
+  getResetPreview: async (): Promise<{
+    company_name: string;
+    counts: {
+      sales_invoices: number;
+      sales_invoice_items: number;
+      journal_entries: number;
+      journal_entry_lines: number;
+      customers: number;
+    };
+    total_records_to_wipe: number;
+    preserved_entities: string[];
+  }> => {
+    const res = await axios.get<any>("/api/v1/core/settings/reset-preview");
+    return res.data.data || res.data;
+  },
+
+  resetData: async (payload: {
+    confirmation_name: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    backup: {
+      filename: string;
+      size_kb: number;
+      driver: string;
+    };
+    deleted_records: any;
+  }> => {
+    const res = await axios.post<any>("/api/v1/core/settings/reset-data", payload);
+    return res.data;
+  },
 };
 
 export interface SystemSettingsApi {

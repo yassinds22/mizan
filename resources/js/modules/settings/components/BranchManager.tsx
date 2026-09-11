@@ -137,10 +137,10 @@ export const BranchManager: React.FC<BranchManagerProps> = ({
       resetForm();
       onReload();
     } catch (err: any) {
-      const msg =
-        err.response?.data?.message ||
-        (err.response?.data?.errors && Object.values(err.response.data.errors)[0]) ||
-        "فشل حذف الفرع";
+      const errorsObj = err.response?.data?.errors;
+      const firstError = errorsObj ? Object.values(errorsObj)[0] : null;
+      const specificMsg = Array.isArray(firstError) ? firstError[0] : firstError;
+      const msg = specificMsg || err.response?.data?.message || "فشل حذف الفرع";
       onNotify(String(msg));
     } finally {
       setSubmitting(false);
@@ -153,10 +153,10 @@ export const BranchManager: React.FC<BranchManagerProps> = ({
       onNotify(`تم ${branch.is_active ? "تعطيل" : "تفعيل"} الفرع (${branch.code})`);
       onReload();
     } catch (err: any) {
-      const msg =
-        err.response?.data?.message ||
-        (err.response?.data?.errors && Object.values(err.response.data.errors)[0]) ||
-        "فشلت العملية";
+      const errorsObj = err.response?.data?.errors;
+      const firstError = errorsObj ? Object.values(errorsObj)[0] : null;
+      const specificMsg = Array.isArray(firstError) ? firstError[0] : firstError;
+      const msg = specificMsg || err.response?.data?.message || "فشلت العملية";
       onNotify(String(msg));
     }
   };

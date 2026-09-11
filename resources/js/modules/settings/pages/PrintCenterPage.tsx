@@ -1,13 +1,31 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Printer } from "lucide-react";
 import { trialBalanceRows } from "@/data/accounting";
 import { Modal } from "@/components/ui/Modal";
 import { money } from "@/utils/formatters";
+import { coreApi } from "@/api/core";
 
 export const PrintCenterPage: React.FC = () => {
   const [open, setOpen] = useState(false);
+  const [companyName, setCompanyName] = useState("ميزان للتجارة الغذائية");
+  const [taxNumber, setTaxNumber] = useState("310123456700003");
+  const [branchName, setBranchName] = useState("الفرع الرئيسي");
+
   const debit = trialBalanceRows.reduce((s, r) => s + r.debit, 0);
   const credit = trialBalanceRows.reduce((s, r) => s + r.credit, 0);
+
+  useEffect(() => {
+    coreApi.getSettings().then((s) => {
+      if (s.company_name) setCompanyName(s.company_name);
+      if (s.tax_number) setTaxNumber(s.tax_number);
+    }).catch(() => {});
+
+    coreApi.getBranches({ is_active: true }).then((branches) => {
+      if (branches && branches.length > 0) {
+        setBranchName(branches[0].name);
+      }
+    }).catch(() => {});
+  }, []);
 
   return (
     <div className="grid" style={{ gap: 16 }}>
@@ -48,10 +66,10 @@ export const PrintCenterPage: React.FC = () => {
       >
         <div className="print-sheet">
           <header>
-            <strong>ميزان للتجارة الغذائية</strong>
-            <span>الرقم الضريبي 310123456700003</span>
+            <strong>{companyName}</strong>
+            <span>الرقم الضريبي {taxNumber}</span>
           </header>
-          <p>فرع الرياض · السنة المالية 2026</p>
+          <p>{branchName} · السنة المالية 2026</p>
           <ul>
             {trialBalanceRows.slice(0, 6).map((r) => (
               <li key={r.code}>
@@ -64,7 +82,7 @@ export const PrintCenterPage: React.FC = () => {
           </p>
           <footer>
             <span>فاتورة / تقرير وفق قالب الشركة الموحّد</span>
-            <strong>فرع الرياض</strong>
+            <strong>{branchName}</strong>
           </footer>
         </div>
       </Modal>
