@@ -294,12 +294,15 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       } else if ((e.ctrlKey || e.metaKey) && e.key === "p") {
         e.preventDefault();
         openPrintPreview();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        handleStartNewInvoice();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentSavedInvoice, submitting, lines]);
+  }, [currentSavedInvoice, submitting, lines, items]);
 
   // Load master data
   useEffect(() => {
@@ -523,6 +526,28 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       addNewLineWithItem(items[0]);
     }
     showToast("تم تفريغ الفاتورة وبدء مسودة فارغة", "info");
+  };
+
+  // Start New Invoice for Next Customer
+  const handleStartNewInvoice = () => {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch (e) {}
+    setCurrentSavedInvoice(null);
+    setInvoiceNumber("");
+    setLines([]);
+    setSelectedCustomerId("cash");
+    setPaymentMethod("cash");
+    setNotes("");
+    setCashTendered("");
+    setIsDraftRestored(false);
+    if (items.length > 0) {
+      addNewLineWithItem(items[0]);
+    }
+    showToast("جاهز لإنشاء فاتورة جديدة للعميل التالي ✨", "info");
+    setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 150);
   };
 
   // Barcode & Quick Search
@@ -931,6 +956,44 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
               }}
             >
               <Save size={15} /> {submitting ? "حفظ..." : "حفظ كمسودة"}
+            </button>
+          )}
+
+          {currentSavedInvoice && (
+            <button
+              type="button"
+              className="btn"
+              onClick={handleStartNewInvoice}
+              title="بدء فاتورة بيع جديدة للعميل التالي (F4)"
+              style={{
+                height: 40,
+                padding: "0 18px",
+                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                color: "#ffffff",
+                fontSize: 13,
+                fontWeight: 800,
+                borderRadius: 8,
+                border: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                boxShadow: "0 4px 14px rgba(5, 150, 105, 0.35)",
+                cursor: "pointer",
+              }}
+            >
+              <Plus size={16} strokeWidth={2.8} />
+              <span>فاتورة جديدة</span>
+              <span
+                style={{
+                  background: "rgba(255,255,255,0.25)",
+                  padding: "1px 6px",
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontFamily: "monospace",
+                }}
+              >
+                F4
+              </span>
             </button>
           )}
 
@@ -2135,35 +2198,70 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           )}
 
           {/* Primary Action Button inside Totals Box */}
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => handleSaveInvoice(true)}
-            disabled={submitting || currentSavedInvoice?.status.value === "posted"}
-            style={{
-              marginTop: 6,
-              height: 44,
-              width: "100%",
-              background:
-                currentSavedInvoice?.status.value === "posted"
-                  ? "var(--muted, #7a8b82)"
-                  : "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
-              fontSize: 14,
-              fontWeight: 800,
-              boxShadow: "0 6px 18px rgba(26, 92, 69, 0.28)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            <Send size={16} />
-            {currentSavedInvoice?.status.value === "posted"
-              ? "الفاتورة مرحّلة ومؤكدة"
-              : submitting
-              ? "جارِ الحفظ والترحيل..."
-              : `حفظ وترحيل (${money(calculations.netTotal)})`}
-          </button>
+          {currentSavedInvoice?.status.value === "posted" ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={handleStartNewInvoice}
+              style={{
+                marginTop: 6,
+                height: 48,
+                width: "100%",
+                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                color: "#ffffff",
+                fontSize: 14,
+                fontWeight: 900,
+                borderRadius: "var(--radius-sm, 10px)",
+                border: "none",
+                boxShadow: "0 8px 22px rgba(5, 150, 105, 0.35)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <Plus size={18} strokeWidth={3} />
+              <span>بدء فاتورة جديدة للعميل التالي</span>
+              <span
+                style={{
+                  background: "rgba(255,255,255,0.25)",
+                  padding: "2px 8px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                }}
+              >
+                F4
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => handleSaveInvoice(true)}
+              disabled={submitting}
+              style={{
+                marginTop: 6,
+                height: 44,
+                width: "100%",
+                background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+                fontSize: 14,
+                fontWeight: 800,
+                boxShadow: "0 6px 18px rgba(26, 92, 69, 0.28)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <Send size={16} />
+              {submitting
+                ? "جارِ الحفظ والترحيل..."
+                : `حفظ وترحيل (${money(calculations.netTotal)})`}
+            </button>
+          )}
         </div>
       </div>
 
