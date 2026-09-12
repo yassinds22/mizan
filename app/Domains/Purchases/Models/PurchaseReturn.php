@@ -6,32 +6,29 @@ namespace App\Domains\Purchases\Models;
 
 use App\Domains\Accounting\Models\JournalEntry;
 use App\Domains\Core\Models\Branch;
-use App\Domains\Purchases\Enums\PurchaseInvoiceStatus;
-use App\Domains\Sales\Enums\PaymentMethod;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class PurchaseInvoice extends Model
+class PurchaseReturn extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'invoice_number',
-        'supplier_invoice_number',
-        'invoice_date',
-        'due_date',
+        'return_number',
+        'debit_note_number',
+        'purchase_invoice_id',
+        'return_date',
         'branch_id',
         'supplier_id',
         'supplier_name',
-        'supplier_tax_number',
-        'payment_method',
+        'refund_method',
         'status',
         'subtotal',
-        'discount_amount',
         'tax_amount',
         'total_amount',
+        'reason',
         'notes',
         'journal_entry_id',
         'posted_at',
@@ -39,12 +36,8 @@ class PurchaseInvoice extends Model
     ];
 
     protected $casts = [
-        'invoice_date' => 'date',
-        'due_date' => 'date',
-        'status' => PurchaseInvoiceStatus::class,
-        'payment_method' => PaymentMethod::class,
+        'return_date' => 'date',
         'subtotal' => 'decimal:4',
-        'discount_amount' => 'decimal:4',
         'tax_amount' => 'decimal:4',
         'total_amount' => 'decimal:4',
         'posted_at' => 'datetime',
@@ -53,22 +46,22 @@ class PurchaseInvoice extends Model
 
     public function isPosted(): bool
     {
-        return $this->status === PurchaseInvoiceStatus::POSTED;
-    }
-
-    public function isDraft(): bool
-    {
-        return $this->status === PurchaseInvoiceStatus::DRAFT;
+        return $this->status === 'posted';
     }
 
     public function isCancelled(): bool
     {
-        return $this->status === PurchaseInvoiceStatus::CANCELLED;
+        return $this->status === 'cancelled';
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id');
     }
 
     public function lines(): HasMany
     {
-        return $this->hasMany(PurchaseInvoiceLine::class);
+        return $this->hasMany(PurchaseReturnLine::class, 'purchase_return_id');
     }
 
     public function supplier(): BelongsTo
@@ -84,10 +77,5 @@ class PurchaseInvoice extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
-    }
-
-    public function purchaseReturns(): HasMany
-    {
-        return $this->hasMany(PurchaseReturn::class, 'purchase_invoice_id');
     }
 }

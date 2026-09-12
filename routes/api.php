@@ -114,6 +114,11 @@ Route::prefix('v1/purchases')->group(function () {
     Route::post('invoices/{id}/post', [\App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class, 'post']);
     Route::post('invoices/{id}/cancel', [\App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class, 'cancel']);
     Route::apiResource('invoices', \App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class);
+
+    // 3. مردودات المشتريات والإشعارات المدينة (Purchase Returns & Debit Notes)
+    Route::get('invoices/{id}/returnable-lines', [\App\Http\Controllers\Api\V1\Purchases\PurchaseReturnController::class, 'returnableLines']);
+    Route::post('returns/{id}/cancel', [\App\Http\Controllers\Api\V1\Purchases\PurchaseReturnController::class, 'cancel']);
+    Route::apiResource('returns', \App\Http\Controllers\Api\V1\Purchases\PurchaseReturnController::class)->only(['index', 'store', 'show']);
 });
 
 Route::prefix('v1/treasury')->group(function () {

@@ -10,12 +10,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PurchaseInvoiceLine extends Model
+class PurchaseReturnLine extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'purchase_invoice_id',
+        'purchase_return_id',
+        'purchase_invoice_line_id',
         'item_id',
         'item_unit_id',
         'unit_name',
@@ -23,7 +24,6 @@ class PurchaseInvoiceLine extends Model
         'quantity',
         'base_quantity',
         'unit_price',
-        'discount_amount',
         'tax_rate',
         'tax_amount',
         'subtotal',
@@ -35,16 +35,20 @@ class PurchaseInvoiceLine extends Model
         'quantity' => 'decimal:4',
         'base_quantity' => 'decimal:4',
         'unit_price' => 'decimal:4',
-        'discount_amount' => 'decimal:4',
         'tax_rate' => 'decimal:2',
         'tax_amount' => 'decimal:4',
         'subtotal' => 'decimal:4',
         'total' => 'decimal:4',
     ];
 
-    public function purchaseInvoice(): BelongsTo
+    public function purchaseReturn(): BelongsTo
     {
-        return $this->belongsTo(PurchaseInvoice::class);
+        return $this->belongsTo(PurchaseReturn::class);
+    }
+
+    public function purchaseInvoiceLine(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseInvoiceLine::class);
     }
 
     public function item(): BelongsTo
@@ -55,10 +59,5 @@ class PurchaseInvoiceLine extends Model
     public function itemUnit(): BelongsTo
     {
         return $this->belongsTo(ItemUnit::class);
-    }
-
-    public function returnLines(): \Illuminate\Database\Eloquent\Relations\HasMany
-    {
-        return $this->hasMany(PurchaseReturnLine::class, 'purchase_invoice_line_id');
     }
 }

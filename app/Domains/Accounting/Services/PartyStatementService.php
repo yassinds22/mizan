@@ -8,6 +8,7 @@ use App\Domains\Accounting\Enums\JournalEntryStatus;
 use App\Domains\Accounting\Models\Account;
 use App\Domains\Accounting\Models\JournalEntry;
 use App\Domains\Purchases\Models\PurchaseInvoice;
+use App\Domains\Purchases\Models\PurchaseReturn;
 use App\Domains\Purchases\Models\Supplier;
 use App\Domains\Sales\Models\Customer;
 use App\Domains\Sales\Models\SalesInvoice;
@@ -231,7 +232,54 @@ class PartyStatementService
             ]);
         }
 
-        // 2. السندات المالية (صرف لمورد أو قبض استرداد من مورد)
+        // 2. مردودات المشتريات والإشعارات المدينة المرحّلة
+        $returnsQuery = PurchaseReturn::query()
+            ->where('supplier_id', $supplierId)
+            ->whereNotNull('journal_entry_id')
+            ->with(['journalEntry.lines.account']);
+
+        if ($branchId) {
+            $returnsQuery->where('branch_id', $branchId);
+        }
+
+        $returns = $returnsQuery->get();
+        $returnJeIds = [];
+
+        foreach ($returns as $ret) {
+            $entry = $ret->journalEntry;
+            if (!$entry || !$entry->isPosted()) {
+                continue;
+            }
+            $returnJeIds[] = $entry->id;
+
+            $partyLines = $entry->lines->filter(function ($line) use ($controlAccountIds) {
+                return in_array($line->account_id, $controlAccountIds, true);
+            });
+
+            $debit = (float) $partyLines->sum('debit');
+            $credit = (float) $partyLines->sum('credit');
+
+            if ($debit == 0 && $credit == 0) {
+                continue;
+            }
+
+            $transactions->push([
+                'id' => "PRET-{$ret->id}",
+                'date' => $entry->date ? $entry->date->toDateString() : $ret->return_date->toDateString(),
+                'journal_entry_id' => $entry->id,
+                'journal_entry_number' => $entry->entry_number,
+                'document_type' => 'purchase_return',
+                'document_type_label' => 'مردود مشتريات / إشعار مدين',
+                'document_id' => $ret->id,
+                'document_number' => $ret->return_number,
+                'reference' => $ret->debit_note_number ?: $ret->return_number,
+                'description' => $ret->reason ?: ($entry->description ?: "مردود مشتريات رقم {$ret->return_number}"),
+                'debit' => $debit,
+                'credit' => $credit,
+            ]);
+        }
+
+        // 3. السندات المالية (صرف لمورد أو قبض استرداد من مورد)
         $vouchersQuery = Voucher::query()
             ->where('party_type', VoucherPartyType::SUPPLIER)
             ->where('party_id', $supplierId)
@@ -283,8 +331,8 @@ class PartyStatementService
             ]);
         }
 
-        // 3. التحقق من القيود العكسية (Reversal Entries) لأي مستند ملغي
-        $parentJeIds = array_merge($invoiceJeIds, $voucherJeIds);
+        // 4. التحقق من القيود العكسية (Reversal Entries) لأي مستند ملغي
+        $parentJeIds = array_merge($invoiceJeIds, $returnJeIds, $voucherJeIds);
         if (!empty($parentJeIds)) {
             $reversals = JournalEntry::query()
                 ->whereIn('reversal_of_id', $parentJeIds)
