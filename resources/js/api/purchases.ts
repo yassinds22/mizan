@@ -199,4 +199,141 @@ export const purchasesApi = {
     if (!res.ok) throw new Error(json.message || 'فشل إلغاء فاتورة المشتريات');
     return json.data;
   },
+
+  // 3. Purchase Returns & Debit Notes
+  async getReturnableLines(invoiceId: number): Promise<ReturnablePurchaseInvoiceData> {
+    const res = await fetch(`${API_BASE}/invoices/${invoiceId}/returnable-lines`);
+    if (!res.ok) throw new Error('فشل جلب أسطر الفاتورة القابلة للإرجاع');
+    const json = await res.json();
+    return json.data;
+  },
+
+  async createPurchaseReturn(payload: CreatePurchaseReturnPayload): Promise<PurchaseReturn> {
+    const res = await fetch(`${API_BASE}/returns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل ترحيل مردود المشتريات');
+    return json.data;
+  },
+
+  async getReturns(filters: {
+    search?: string;
+    status?: string;
+    supplier_id?: number | string;
+    branch_id?: number | string;
+    per_page?: number;
+  } = {}): Promise<{ data: PurchaseReturn[]; total?: number }> {
+    const params = new URLSearchParams();
+    if (filters.search) params.append('search', filters.search);
+    if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+    if (filters.supplier_id && filters.supplier_id !== 'all') params.append('supplier_id', String(filters.supplier_id));
+    if (filters.branch_id && filters.branch_id !== 'all') params.append('branch_id', String(filters.branch_id));
+    if (filters.per_page) params.append('per_page', String(filters.per_page));
+
+    const res = await fetch(`${API_BASE}/returns?${params.toString()}`);
+    if (!res.ok) throw new Error('فشل جلب مردودات المشتريات');
+    const json = await res.json();
+    return { data: json.data || [], total: json.meta?.total || json.data?.length };
+  },
+
+  async getReturn(id: number): Promise<PurchaseReturn> {
+    const res = await fetch(`${API_BASE}/returns/${id}`);
+    if (!res.ok) throw new Error('فشل جلب تفاصيل مردود المشتريات');
+    const json = await res.json();
+    return json.data;
+  },
+
+  async cancelReturn(id: number, reason?: string): Promise<PurchaseReturn> {
+    const res = await fetch(`${API_BASE}/returns/${id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل إلغاء مردود المشتريات');
+    return json.data;
+  },
 };
+
+export interface PurchaseReturnLine {
+  id?: number;
+  purchase_invoice_line_id: number;
+  item_id: number;
+  item_name_ar?: string;
+  item_sku?: string;
+  unit_name: string;
+  conversion_factor: number;
+  quantity: number;
+  base_quantity?: number;
+  unit_price: number;
+  tax_rate: number;
+  tax_amount?: number;
+  subtotal?: number;
+  total?: number;
+}
+
+export interface PurchaseReturn {
+  id: number;
+  return_number: string;
+  debit_note_number?: string;
+  purchase_invoice_id: number;
+  original_invoice_number?: string;
+  supplier_invoice_number?: string;
+  return_date: string;
+  branch_id: number;
+  branch_name?: string;
+  supplier_id: number;
+  supplier_name?: string;
+  refund_method: 'credit' | 'cash' | 'bank_transfer';
+  status: 'posted' | 'cancelled';
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  reason?: string;
+  notes?: string;
+  journal_entry_id?: number | null;
+  journal_entry_number?: string;
+  posted_at?: string;
+  cancelled_at?: string;
+  created_at?: string;
+  lines: PurchaseReturnLine[];
+}
+
+export interface ReturnablePurchaseInvoiceData {
+  invoice_id: number;
+  invoice_number: string;
+  supplier_invoice_number?: string;
+  invoice_date: string;
+  supplier_id: number;
+  supplier_name?: string;
+  payment_method: string;
+  lines: {
+    purchase_invoice_line_id: number;
+    item_id: number;
+    item_name_ar: string;
+    item_sku: string;
+    unit_name: string;
+    conversion_factor: number;
+    original_quantity: number;
+    already_returned_quantity: number;
+    remaining_quantity: number;
+    unit_price: number;
+    tax_rate: number;
+  }[];
+}
+
+export interface CreatePurchaseReturnPayload {
+  purchase_invoice_id: number;
+  return_date?: string;
+  refund_method: 'credit' | 'cash' | 'bank_transfer';
+  reason?: string;
+  notes?: string;
+  lines: {
+    purchase_invoice_line_id: number;
+    quantity: number;
+  }[];
+}
+

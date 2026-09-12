@@ -24,10 +24,12 @@ import { tafqeet } from "@/utils/tafqeet";
 import { coreApi } from "@/api/core";
 import { treasuryApi, VoucherRecord } from "@/api/treasury";
 import { productsApi, Item, ItemUnit } from "@/api/products";
-import { purchasesApi, Supplier, PurchaseInvoice } from "@/api/purchases";
+import { purchasesApi, Supplier, PurchaseInvoice, PurchaseReturn } from "@/api/purchases";
 import { SupplierModal } from "../components/SupplierModal";
 import { QuickItemModal } from "../components/QuickItemModal";
 import { QuickPaymentModal } from "../components/QuickPaymentModal";
+import { PurchaseReturnModal } from "../components/PurchaseReturnModal";
+import { DebitNotePrintModal } from "../components/DebitNotePrintModal";
 import QRCode from "qrcode";
 import { Banknote } from "lucide-react";
 
@@ -78,6 +80,9 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
   const [showQuickPaymentModal, setShowQuickPaymentModal] = useState(false);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [recentReturn, setRecentReturn] = useState<PurchaseReturn | null>(null);
+  const [showDebitNotePrint, setShowDebitNotePrint] = useState(false);
   const [currentSavedPurchase, setCurrentSavedPurchase] = useState<PurchaseInvoice | null>(null);
   const [invoicePaidAmount, setInvoicePaidAmount] = useState(0);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
@@ -631,29 +636,55 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
           )}
 
           {currentSavedPurchase?.status.value === "posted" && (
-            <button
-              type="button"
-              className="btn"
-              onClick={handleCancelInvoice}
-              disabled={submitting}
-              style={{
-                height: 40,
-                padding: "0 14px",
-                background: "#fef2f2",
-                color: "#dc2626",
-                border: "1px solid #fecaca",
-                fontSize: 13,
-                fontWeight: 800,
-                borderRadius: 8,
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                cursor: "pointer",
-              }}
-              title="إلغاء الفاتورة وخصم الكميات من المخزون وعكس القيد"
-            >
-              <XCircle size={15} /> إلغاء الفاتورة
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowReturnModal(true)}
+                disabled={submitting}
+                style={{
+                  height: 40,
+                  padding: "0 14px",
+                  background: "#f0fdf4",
+                  color: "#166534",
+                  border: "1px solid #bbf7d0",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                }}
+                title="إرجاع بضاعة للمورد وإصدار إشعار مدين"
+              >
+                <RotateCcw size={15} /> مردود / إشعار مدين
+              </button>
+
+              <button
+                type="button"
+                className="btn"
+                onClick={handleCancelInvoice}
+                disabled={submitting}
+                style={{
+                  height: 40,
+                  padding: "0 14px",
+                  background: "#fef2f2",
+                  color: "#dc2626",
+                  border: "1px solid #fecaca",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                }}
+                title="إلغاء الفاتورة وخصم الكميات من المخزون وعكس القيد"
+              >
+                <XCircle size={15} /> إلغاء الفاتورة
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1700,6 +1731,33 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
           <span>{toast.message}</span>
         </div>
       )}
+
+      {/* Purchase Return Modal */}
+      {currentSavedPurchase && (
+        <PurchaseReturnModal
+          isOpen={showReturnModal}
+          onClose={() => setShowReturnModal(false)}
+          invoiceId={currentSavedPurchase.id}
+          onSuccess={(ret) => {
+            setRecentReturn(ret);
+            setShowDebitNotePrint(true);
+            showToast("تم ترحيل مردود المشتريات وإصدار الإشعار المدين بنجاح! 🔄");
+            showCenterAlert(
+              `تم بنجاح ترحيل مردود المشتريات رقم [${ret.return_number}] وإصدار الإشعار المدين [${ret.debit_note_number || ret.return_number}] بمبلغ إجمالي ${money(ret.total_amount)} وتحديث رصيد المخزون والقيد المحاسبي.`,
+              "success",
+              "تم ترحيل المردود والإشعار المدين 🎉"
+            );
+          }}
+        />
+      )}
+
+      {/* Official Debit Note A4 Print Modal */}
+      <DebitNotePrintModal
+        isOpen={showDebitNotePrint}
+        onClose={() => setShowDebitNotePrint(false)}
+        purchaseReturn={recentReturn}
+        companySettings={companySettings}
+      />
     </div>
   );
 };

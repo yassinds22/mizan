@@ -3,29 +3,29 @@ import {
   PartyReturnModal,
   ReturnableDocumentData,
 } from "@/components/common/PartyReturnModal";
-import { salesApi, SalesReturn } from "@/api/sales";
+import { purchasesApi, PurchaseReturn } from "@/api/purchases";
 
-export interface SalesReturnModalProps {
+export interface PurchaseReturnModalProps {
   isOpen: boolean;
   onClose: () => void;
   invoiceId: number;
-  onSuccess: (salesReturn: SalesReturn) => void;
+  onSuccess: (purchaseReturn: PurchaseReturn) => void;
 }
 
-export const SalesReturnModal: React.FC<SalesReturnModalProps> = ({
+export const PurchaseReturnModal: React.FC<PurchaseReturnModalProps> = ({
   isOpen,
   onClose,
   invoiceId,
   onSuccess,
 }) => {
   const fetchReturnableLines = async (id: number): Promise<ReturnableDocumentData> => {
-    const data = await salesApi.getReturnableLines(id);
+    const data = await purchasesApi.getReturnableLines(id);
     return {
       document_number: data.invoice_number,
-      party_name: data.customer_name || "عميل نقدي عام",
+      party_name: data.supplier_name || "مورد عام",
       payment_method: data.payment_method,
       lines: data.lines.map((l) => ({
-        line_id: l.sales_invoice_line_id,
+        line_id: l.purchase_invoice_line_id,
         item_id: l.item_id,
         item_name_ar: l.item_name_ar,
         item_sku: l.item_sku,
@@ -47,13 +47,13 @@ export const SalesReturnModal: React.FC<SalesReturnModalProps> = ({
     reason: string;
     lines: { line_id: number; quantity: number }[];
   }) => {
-    return await salesApi.createSalesReturn({
-      sales_invoice_id: payload.document_id,
+    return await purchasesApi.createPurchaseReturn({
+      purchase_invoice_id: payload.document_id,
       return_date: payload.return_date,
       refund_method: payload.refund_method,
       reason: payload.reason,
       lines: payload.lines.map((l) => ({
-        sales_invoice_line_id: l.line_id,
+        purchase_invoice_line_id: l.line_id,
         quantity: l.quantity,
       })),
     });
@@ -64,7 +64,7 @@ export const SalesReturnModal: React.FC<SalesReturnModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       documentId={invoiceId}
-      partyType="customer"
+      partyType="supplier"
       fetchReturnableLines={fetchReturnableLines}
       onSubmitReturn={onSubmitReturn}
       onSuccess={onSuccess}
