@@ -25,4 +25,14 @@ class FiscalPeriodClosedException extends DomainException
 
         parent::__construct($message, 422);
     }
+
+    public function render($request)
+    {
+        return response()->json([
+            'message' => $this->getMessage(),
+            'errors' => [
+                'date' => [$this->getMessage()],
+            ],
+        ], 422);
+    }
 }

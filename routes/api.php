@@ -113,4 +113,13 @@ Route::prefix('v1/purchases')->group(function () {
     Route::apiResource('invoices', \App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class);
 });
 
+Route::prefix('v1/treasury')->group(function () {
+    // سندات القبض والصرف (Treasury Vouchers)
+    Route::get('open-invoices', [\App\Http\Controllers\Api\V1\Treasury\VoucherController::class, 'openInvoices']);
+    Route::post('vouchers/{id}/post', [\App\Http\Controllers\Api\V1\Treasury\VoucherController::class, 'post']);
+    Route::post('vouchers/{id}/cancel', [\App\Http\Controllers\Api\V1\Treasury\VoucherController::class, 'cancel']);
+    Route::apiResource('vouchers', \App\Http\Controllers\Api\V1\Treasury\VoucherController::class);
+});
+
+
 
