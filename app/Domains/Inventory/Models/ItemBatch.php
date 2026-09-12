@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ItemBatch extends Model
@@ -36,9 +37,19 @@ class ItemBatch extends Model
         'status' => BatchStatus::class,
     ];
 
+    protected function serializeDate(\DateTimeInterface $date): string
+    {
+        return $date->format('Y-m-d');
+    }
+
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class, 'item_id');
+    }
+
+    public function stockBalances(): HasMany
+    {
+        return $this->hasMany(StockBalance::class, 'batch_id');
     }
 
     public function isExpired(): bool

@@ -3,8 +3,10 @@ import { Plus, Save, Warehouse, MapPin, Thermometer, Box, AlertCircle, CheckCirc
 import { warehousesApi, Warehouse as IWarehouse, WarehouseLocation } from "@/api/warehouses";
 import { inventoryApi, StockBalance } from "@/api/inventory";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { useBaseCurrency } from "../../../utils/currency";
 
 export const WarehousesPage: React.FC = () => {
+  const { currencySymbol } = useBaseCurrency();
   const [warehousesList, setWarehousesList] = useState<IWarehouse[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
@@ -248,7 +250,7 @@ export const WarehousesPage: React.FC = () => {
                 {activeSkusCount} <span style={{ fontSize: 14, fontWeight: 500 }}>صنف نشط</span>
               </div>
               <div className="hint">
-                إجمالي {totalStockQty.toLocaleString()} وحدة · {totalStockVal.toLocaleString()} ر.س
+                إجمالي {totalStockQty.toLocaleString()} وحدة · {totalStockVal.toLocaleString()} {currencySymbol}
               </div>
             </div>
 
@@ -599,15 +601,35 @@ export const WarehousesPage: React.FC = () => {
       {/* Toast Notification */}
       {toast && (
         <div
-          className="toast"
+          className="toast toast-center"
           style={{
-            position: 'fixed', bottom: 24, left: 24, padding: '12px 20px',
-            borderRadius: 8, zIndex: 2000, color: '#fff',
-            backgroundColor: toast.type === 'error' ? '#ef4444' : '#10b981',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            position: "fixed",
+            top: "50%",
+            bottom: "auto",
+            left: "50%",
+            right: "auto",
+            transform: "translate(-50%, -50%)",
+            width: "max-content",
+            height: "auto",
+            minHeight: "auto",
+            padding: "14px 26px",
+            borderRadius: 12,
+            zIndex: 9999,
+            color: "#fff",
+            backgroundColor: toast.type === "error" ? "#dc2626" : "#059669",
+            boxShadow: "0 20px 35px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
+            fontSize: 15,
+            fontWeight: 600,
+            maxWidth: "90vw",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            lineHeight: 1.5,
+            border: "1px solid rgba(255,255,255,0.2)",
           }}
         >
-          {toast.message}
+          {toast.type === "error" ? <AlertCircle size={22} /> : <CheckCircle2 size={22} />}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

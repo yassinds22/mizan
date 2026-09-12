@@ -4,8 +4,10 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { productsApi, Item } from "@/api/products";
 import { warehousesApi, Warehouse, WarehouseLocation } from "@/api/warehouses";
 import { inventoryApi, StockMovement, StockBalance, ItemBatch, MovementType } from "@/api/inventory";
+import { useBaseCurrency } from "../../../utils/currency";
 
 export const StockMovePage: React.FC = () => {
+  const { currencySymbol } = useBaseCurrency();
   // Master lists
   const [itemsList, setItemsList] = useState<Item[]>([]);
   const [warehousesList, setWarehousesList] = useState<Warehouse[]>([]);
@@ -137,6 +139,29 @@ export const StockMovePage: React.FC = () => {
     }
   }, [selectedBatchId, itemBatches]);
 
+  // Auto-align location & batch with available stock in the selected warehouse
+  useEffect(() => {
+    if (!selectedItemId || !fromWarehouseId || itemBalances.length === 0) return;
+
+    const available = itemBalances.filter(
+      (b) => b.item_id === selectedItemId && b.warehouse_id === fromWarehouseId && Number(b.available_quantity) > 0
+    );
+
+    if (available.length > 0) {
+      // Pick the first available balance
+      const top = available[0];
+      if (top.batch_id) {
+        setSelectedBatchId(top.batch_id);
+      }
+      if (top.location_id) {
+        setFromLocationId(top.location_id);
+      }
+      if (top.unit_cost) {
+        setUnitCost(Number(top.unit_cost));
+      }
+    }
+  }, [fromWarehouseId, selectedItemId, itemBalances]);
+
   // FEFO Auto-Allocation Trigger
   const handleFefoAllocate = async () => {
     if (!selectedItemId) return;
@@ -190,10 +215,15 @@ export const StockMovePage: React.FC = () => {
       showToast("الكمية يجب أن تكون أكبر من صفر", "error");
       return;
     }
+    if (currentAvailableQty < quantity) {
+      showToast(`الرصيد المتاح حالياً (${currentAvailableQty}) غير كافٍ لتحويل (${quantity}) وحدة من هذا الصنف والدفعة.`, "error");
+      return;
+    }
 
     try {
       setSubmitting(true);
       const payload = {
+        movement_type: moveType,
         type: moveType,
         movement_date: moveDate,
         from_warehouse_id: fromWarehouseId,
@@ -338,12 +368,18 @@ export const StockMovePage: React.FC = () => {
                     onChange={(e) => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
                   >
                     <option value="">بدون دفعة محددة</option>
-                    {itemBatches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.batch_number} — انتهاء: {b.expiry_date}{" "}
-                        {b.is_near_expiry ? "⚠️ (قريب انتهاء)" : ""}
-                      </option>
-                    ))}
+                    {itemBatches.map((b) => {
+                      const bBal = itemBalances.find(
+                        (bal) => bal.item_id === selectedItemId && bal.warehouse_id === fromWarehouseId && bal.batch_id === b.id
+                      );
+                      const qty = bBal ? Number(bBal.available_quantity) : 0;
+                      return (
+                        <option key={b.id} value={b.id}>
+                          {b.batch_number} — انتهاء: {b.expiry_date}
+                          {qty > 0 ? ` (المتوفر هنا: ${qty})` : " (غير متوفر بهذا المستودع)"}
+                        </option>
+                      );
+                    })}
                   </select>
                   <button
                     type="button"
@@ -380,11 +416,22 @@ export const StockMovePage: React.FC = () => {
                   onChange={(e) => setFromLocationId(e.target.value ? Number(e.target.value) : null)}
                 >
                   <option value="">الموقع الافتراضي</option>
-                  {fromLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.code} ({loc.full_code})
-                    </option>
-                  ))}
+                  {fromLocations.map((loc) => {
+                    const locBal = itemBalances.find(
+                      (bal) =>
+                        bal.item_id === selectedItemId &&
+                        bal.warehouse_id === fromWarehouseId &&
+                        bal.location_id === loc.id &&
+                        (selectedBatchId ? bal.batch_id === selectedBatchId : true)
+                    );
+                    const qty = locBal ? Number(locBal.available_quantity) : 0;
+                    return (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.code} ({loc.full_code})
+                        {qty > 0 ? ` — متوفر: ${qty}` : " — فارغ (0)"}
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
 
@@ -428,7 +475,7 @@ export const StockMovePage: React.FC = () => {
 
               {/* Quantity */}
               <label className="label">
-                الكمية المطلوبة *
+                الكمية المطلوبة ({itemsList.find((i) => i.id === selectedItemId)?.base_uom?.name_ar || "وحدة"}) *
                 <input
                   type="number"
                   min="0.01"
@@ -452,7 +499,7 @@ export const StockMovePage: React.FC = () => {
 
               {/* Unit Cost */}
               <label className="label">
-                تكلفة الوحدة (ر.س)
+                تكلفة {itemsList.find((i) => i.id === selectedItemId)?.base_uom?.name_ar || "الوحدة"} الواحد ({currencySymbol})
                 <input
                   type="number"
                   step="0.01"
@@ -515,7 +562,7 @@ export const StockMovePage: React.FC = () => {
             <div className="stat-row">
               <span>إجمالي القيمة التقديرية</span>
               <strong style={{ fontSize: 18, color: "var(--color-primary, #3b82f6)" }}>
-                {totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س
+                {totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currencySymbol}
               </strong>
             </div>
 
@@ -580,7 +627,7 @@ export const StockMovePage: React.FC = () => {
                     </td>
                     <td>{m.from_warehouse?.name || "-"}</td>
                     <td>{m.to_warehouse?.name || (m.type === "transfer" ? "-" : "خارجي")}</td>
-                    <td className="amount">{Number(m.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ر.س</td>
+                    <td className="amount">{Number(m.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} {currencySymbol}</td>
                     <td>
                       {m.journal_entry ? (
                         <span className="pill pill-ok" style={{ fontSize: 11 }}>
@@ -655,7 +702,7 @@ export const StockMovePage: React.FC = () => {
                 </div>
                 <div>
                   <small style={{ opacity: 0.7 }}>إجمالي المبلغ:</small>
-                  <div style={{ fontWeight: 600 }}>{Number(viewMovementModal.total_amount).toLocaleString()} ر.س</div>
+                  <div style={{ fontWeight: 600 }}>{Number(viewMovementModal.total_amount).toLocaleString()} {currencySymbol}</div>
                 </div>
               </div>
 
@@ -681,8 +728,8 @@ export const StockMovePage: React.FC = () => {
                         <td>{line.from_location?.code || "-"}</td>
                         <td>{line.to_location?.code || "-"}</td>
                         <td className="amount">{Number(line.quantity).toLocaleString()}</td>
-                        <td className="amount">{Number(line.unit_cost).toFixed(2)} ر.س</td>
-                        <td className="amount">{(Number(line.quantity) * Number(line.unit_cost)).toFixed(2)} ر.س</td>
+                        <td className="amount">{Number(line.unit_cost).toFixed(2)} {currencySymbol}</td>
+                        <td className="amount">{(Number(line.quantity) * Number(line.unit_cost)).toFixed(2)} {currencySymbol}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -703,15 +750,35 @@ export const StockMovePage: React.FC = () => {
       {/* Toast */}
       {toast && (
         <div
-          className="toast"
+          className="toast toast-center"
           style={{
-            position: "fixed", bottom: 24, left: 24, padding: "12px 20px",
-            borderRadius: 8, zIndex: 2000, color: "#fff",
-            backgroundColor: toast.type === "error" ? "#ef4444" : "#10b981",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            position: "fixed",
+            top: "50%",
+            bottom: "auto",
+            left: "50%",
+            right: "auto",
+            transform: "translate(-50%, -50%)",
+            width: "max-content",
+            height: "auto",
+            minHeight: "auto",
+            padding: "14px 26px",
+            borderRadius: 12,
+            zIndex: 9999,
+            color: "#fff",
+            backgroundColor: toast.type === "error" ? "#dc2626" : "#059669",
+            boxShadow: "0 20px 35px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
+            fontSize: 15,
+            fontWeight: 600,
+            maxWidth: "90vw",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            lineHeight: 1.5,
+            border: "1px solid rgba(255,255,255,0.2)",
           }}
         >
-          {toast.message}
+          {toast.type === "error" ? <AlertCircle size={22} /> : <CheckCircle2 size={22} />}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

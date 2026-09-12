@@ -16,10 +16,23 @@ export interface ItemBatch {
   is_expired?: boolean;
   days_until_expiry?: number;
   is_near_expiry?: boolean;
+  current_quantity?: number;
+  available_quantity?: number;
+  total_value?: number;
+  warehouses?: Array<{
+    warehouse_id: number;
+    warehouse_name?: string;
+    warehouse_code?: string;
+    location_id?: number | null;
+    location_code?: string | null;
+    quantity: number;
+    available_quantity: number;
+  }>;
   item?: {
     id: number;
     sku: string;
     name_ar: string;
+    base_uom?: { id: number; name_ar: string; code: string };
   };
 }
 
@@ -131,7 +144,9 @@ export interface FefoAllocationResult {
 }
 
 export interface CreateMovementPayload {
-  type: MovementType;
+  movement_type?: MovementType;
+  type?: MovementType;
+  branch_id?: number;
   movement_date: string;
   from_warehouse_id?: number | null;
   to_warehouse_id?: number | null;
@@ -210,7 +225,7 @@ export const inventoryApi = {
     return json.data;
   },
 
-  async createBatch(payload: Partial<ItemBatch>): Promise<ItemBatch> {
+  async createBatch(payload: Partial<ItemBatch> & { warehouse_id?: number; location_id?: number; initial_quantity?: number }): Promise<ItemBatch> {
     const res = await fetch(`${API_BASE}/batches`, {
       method: 'POST',
       headers: {
@@ -225,6 +240,34 @@ export const inventoryApi = {
       throw new Error(msg);
     }
     return json.data;
+  },
+
+  async updateBatch(id: number, payload: Partial<ItemBatch>): Promise<ItemBatch> {
+    const res = await fetch(`${API_BASE}/batches/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل تحديث بيانات الدفعة';
+      throw new Error(msg);
+    }
+    return json.data;
+  },
+
+  async deleteBatch(id: number): Promise<void> {
+    const res = await fetch(`${API_BASE}/batches/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      const json = await res.json();
+      throw new Error(json.message || 'فشل حذف الدفعة');
+    }
   },
 
   // 4. Movements (Headers & Multi-line Documents)
@@ -252,13 +295,18 @@ export const inventoryApi = {
   },
 
   async createMovement(payload: CreateMovementPayload): Promise<StockMovement> {
+    const finalPayload = {
+      ...payload,
+      movement_type: payload.movement_type || payload.type,
+      type: payload.type || payload.movement_type,
+    };
     const res = await fetch(`${API_BASE}/movements`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(finalPayload),
     });
     const json = await res.json();
     if (!res.ok) {

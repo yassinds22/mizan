@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Inventory;
 
+use App\Domains\Core\Models\Branch;
 use App\Domains\Inventory\Enums\MovementType;
 use App\Domains\Inventory\Services\StockMovementService;
+use App\Domains\Warehouses\Models\Warehouse;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,6 +21,10 @@ class StockMovementController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        if ($request->has('type') && !$request->has('movement_type')) {
+            $request->merge(['movement_type' => $request->input('type')]);
+        }
+
         $filters = $request->only([
             'movement_type',
             'status',
@@ -53,6 +59,28 @@ class StockMovementController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // Support either 'type' or 'movement_type' seamlessly
+        if ($request->has('type') && !$request->has('movement_type')) {
+            $request->merge(['movement_type' => $request->input('type')]);
+        }
+
+        // Auto-assign branch_id from warehouse if not specified
+        if (!$request->filled('branch_id')) {
+            $branchId = null;
+            if ($request->filled('from_warehouse_id')) {
+                $wh = Warehouse::find($request->input('from_warehouse_id'));
+                $branchId = $wh?->branch_id;
+            }
+            if (!$branchId && $request->filled('to_warehouse_id')) {
+                $wh = Warehouse::find($request->input('to_warehouse_id'));
+                $branchId = $wh?->branch_id;
+            }
+            if (!$branchId) {
+                $branchId = Branch::first()?->id ?? 1;
+            }
+            $request->merge(['branch_id' => $branchId]);
+        }
+
         $validated = $request->validate([
             'movement_type' => ['required', Rule::enum(MovementType::class)],
             'movement_date' => ['nullable', 'date'],

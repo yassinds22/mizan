@@ -16,7 +16,12 @@ class BatchService
      */
     public function listBatches(array $filters = []): Collection
     {
-        $query = ItemBatch::query()->with(['item.category', 'item.baseUom']);
+        $query = ItemBatch::query()->with([
+            'item.category',
+            'item.baseUom',
+            'stockBalances.warehouse',
+            'stockBalances.location',
+        ]);
 
         if (!empty($filters['item_id'])) {
             $query->where('item_id', (int) $filters['item_id']);
