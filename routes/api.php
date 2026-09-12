@@ -102,4 +102,15 @@ Route::prefix('v1/sales')->group(function () {
     Route::get('returns/{id}', [\App\Http\Controllers\Api\V1\Sales\SalesReturnController::class, 'show']);
 });
 
+Route::prefix('v1/purchases')->group(function () {
+    // 1. الموردين (Suppliers)
+    Route::get('suppliers/all-active', [\App\Http\Controllers\Api\V1\Purchases\SupplierController::class, 'allActive']);
+    Route::apiResource('suppliers', \App\Http\Controllers\Api\V1\Purchases\SupplierController::class);
+
+    // 2. فواتير المشتريات (Purchase Invoices)
+    Route::post('invoices/{id}/post', [\App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class, 'post']);
+    Route::post('invoices/{id}/cancel', [\App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class, 'cancel']);
+    Route::apiResource('invoices', \App\Http\Controllers\Api\V1\Purchases\PurchaseInvoiceController::class);
+});
+
 

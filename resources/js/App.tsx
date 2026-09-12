@@ -68,6 +68,7 @@ const getInitialPage = (): PageId => {
 export const App: React.FC = () => {
   const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
 
   const setCurrentPage = (page: PageId) => {
     setCurrentPageState(page);
@@ -136,10 +137,23 @@ export const App: React.FC = () => {
         );
       case "purchases":
         return (
-          <PurchasesPage onOpenDoc={() => setCurrentPage("purchase-doc")} />
+          <PurchasesPage
+            onOpenDoc={(id) => {
+              setSelectedPurchaseId(id || null);
+              setCurrentPage("purchase-doc");
+            }}
+          />
         );
       case "purchase-doc":
-        return <PurchaseDocPage onBack={() => setCurrentPage("purchases")} />;
+        return (
+          <PurchaseDocPage
+            purchaseIdToView={selectedPurchaseId}
+            onBack={() => {
+              setSelectedPurchaseId(null);
+              setCurrentPage("purchases");
+            }}
+          />
+        );
       case "partners":
         return (
           <PartnersPage
