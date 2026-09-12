@@ -1,16 +1,18 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Save, Users, UserPlus, Search, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, Users, UserPlus, Search, RefreshCw, CheckCircle2, AlertCircle, FileText } from "lucide-react";
 import { partners as defaultMockPartners, PartnerItem } from "@/data/partners";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Modal } from "@/components/ui/Modal";
 import { money } from "@/utils/formatters";
 import { salesApi, Customer } from "@/api/sales";
+import { purchasesApi, Supplier } from "@/api/purchases";
 
 interface PartnersPageProps {
   onOpenInvoice?: () => void;
+  onOpenStatement?: (partyType: "supplier" | "customer", partyId: number) => void;
 }
 
-export const PartnersPage: React.FC<PartnersPageProps> = ({ onOpenInvoice }) => {
+export const PartnersPage: React.FC<PartnersPageProps> = ({ onOpenInvoice, onOpenStatement }) => {
   const [kind, setKind] = useState<"الكل" | "عميل" | "مورد">("الكل");
   const [search, setSearch] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -52,26 +54,32 @@ export const PartnersPage: React.FC<PartnersPageProps> = ({ onOpenInvoice }) => 
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Load live customers from DB
-  const loadCustomers = async () => {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  // Load live customers & suppliers from DB
+  const loadPartners = async () => {
     setLoading(true);
     try {
-      const data = await salesApi.getAllActiveCustomers();
-      setCustomers(data || []);
+      const [custData, suppData] = await Promise.all([
+        salesApi.getAllActiveCustomers(),
+        purchasesApi.getAllActiveSuppliers(),
+      ]);
+      setCustomers(custData || []);
+      setSuppliers(suppData || []);
     } catch (e: any) {
-      console.error("Failed to load customers:", e);
+      console.error("Failed to load partners:", e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCustomers();
+    loadPartners();
   }, []);
 
   // Merge live customers with suppliers
   const allPartners = useMemo(() => {
-    const list: Array<PartnerItem & { rawCustomer?: Customer }> = [];
+    const list: Array<PartnerItem & { rawCustomer?: Customer; rawSupplier?: Supplier; rawId?: number }> = [];
 
     // 1. Live Customers from Database
     customers.forEach((c) => {
@@ -85,15 +93,28 @@ export const PartnersPage: React.FC<PartnersPageProps> = ({ onOpenInvoice }) => 
         creditLimit: Number(c.credit_limit) || 0,
         status: c.is_active ? "نشط" : "موقوف",
         rawCustomer: c,
+        rawId: c.id,
       });
     });
 
-    // 2. Suppliers from system
-    const suppliers = defaultMockPartners.filter((p) => p.kind === "مورد");
-    suppliers.forEach((s) => list.push(s));
+    // 2. Live Suppliers from Database
+    suppliers.forEach((s) => {
+      list.push({
+        id: `supp-${s.id}`,
+        kind: "مورد",
+        name: s.name_ar,
+        phone: s.phone || "",
+        city: s.city || "الرياض",
+        balance: Number(s.balance) || 0,
+        creditLimit: Number(s.credit_limit) || 0,
+        status: s.is_active ? "نشط" : "موقوف",
+        rawSupplier: s,
+        rawId: s.id,
+      });
+    });
 
     return list;
-  }, [customers]);
+  }, [customers, suppliers]);
 
   // Filter by kind & search query
   const filteredList = useMemo(() => {
@@ -347,10 +368,35 @@ export const PartnersPage: React.FC<PartnersPageProps> = ({ onOpenInvoice }) => 
                   </span>
                 </div>
                 <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--muted, #7a8b82)" }}>
-                  كود الشريك: {current.rawCustomer?.code || current.id} · {current.city} · {current.phone || "بدون هاتف"}
+                  كود الشريك: {current.rawCustomer?.code || current.rawSupplier?.code || current.id} · {current.city} · {current.phone || "بدون هاتف"}
                 </p>
               </div>
-              <StatusPill status={current.status} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {onOpenStatement && current.rawId && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenStatement(current.kind === "مورد" ? "supplier" : "customer", current.rawId!)}
+                    style={{
+                      height: 32,
+                      padding: "0 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "#f1f5f9",
+                      border: "1px solid #cbd5e1",
+                      color: "#0f172a",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <FileText size={14} color="#059669" />
+                    كشف الحساب المالي
+                  </button>
+                )}
+                <StatusPill status={current.status} />
+              </div>
             </div>
 
             <div className="panel-body" style={{ padding: "20px" }}>

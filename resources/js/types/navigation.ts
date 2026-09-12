@@ -24,7 +24,8 @@ export type PageId =
   | "currencies"
   | "system-states"
   | "vouchers"
-  | "voucher-doc";
+  | "voucher-doc"
+  | "party-statement";
 
 export type Navigate = (page: PageId) => void;
 

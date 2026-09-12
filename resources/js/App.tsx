@@ -26,6 +26,7 @@ import { UsersRolesPage } from "@/modules/settings/pages/UsersRolesPage";
 import { SystemStatesPage } from "@/modules/settings/pages/SystemStatesPage";
 import { VouchersPage } from "@/modules/treasury/pages/VouchersPage";
 import { VoucherDocPage } from "@/modules/treasury/pages/VoucherDocPage";
+import { PartyStatementPage } from "@/modules/accounting/pages/PartyStatementPage";
 import type { PageId } from "@/types/navigation";
 
 const VALID_PAGES: Set<string> = new Set([
@@ -55,6 +56,7 @@ const VALID_PAGES: Set<string> = new Set([
   "system-states",
   "vouchers",
   "voucher-doc",
+  "party-statement",
 ]);
 
 const getInitialPage = (): PageId => {
@@ -75,6 +77,8 @@ export const App: React.FC = () => {
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
   const [selectedVoucherId, setSelectedVoucherId] = useState<number | null>(null);
   const [voucherInitialType, setVoucherInitialType] = useState<"receipt" | "payment">("receipt");
+  const [statementPartyType, setStatementPartyType] = useState<"supplier" | "customer">("supplier");
+  const [statementPartyId, setStatementPartyId] = useState<number | undefined>(undefined);
 
   const setCurrentPage = (page: PageId) => {
     setCurrentPageState(page);
@@ -164,6 +168,11 @@ export const App: React.FC = () => {
         return (
           <PartnersPage
             onOpenInvoice={() => setCurrentPage("invoice")}
+            onOpenStatement={(type, id) => {
+              setStatementPartyType(type);
+              setStatementPartyId(id);
+              setCurrentPage("party-statement");
+            }}
           />
         );
       case "accounting":
@@ -227,6 +236,18 @@ export const App: React.FC = () => {
             onBack={() => {
               setSelectedVoucherId(null);
               setCurrentPage("vouchers");
+            }}
+          />
+        );
+      case "party-statement":
+        return (
+          <PartyStatementPage
+            initialPartyType={statementPartyType}
+            initialPartyId={statementPartyId}
+            onNavigate={(page, params) => {
+              if (params?.party_type) setStatementPartyType(params.party_type);
+              if (params?.party_id) setStatementPartyId(params.party_id);
+              setCurrentPage(page as PageId);
             }}
           />
         );

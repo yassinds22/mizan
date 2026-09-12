@@ -69,6 +69,9 @@ Route::prefix('v1/accounting')->group(function () {
 
     // 3. مراكز التكلفة (Cost Centers)
     Route::apiResource('cost-centers', \App\Http\Controllers\Api\V1\Accounting\CostCenterController::class);
+
+    // 4. كشوفات الحساب المالية للعملاء والموردين (Party Statements Engine)
+    Route::get('statements/party', [\App\Http\Controllers\Api\V1\Accounting\PartyStatementController::class, 'index']);
 });
 
 Route::prefix('v1/products')->group(function () {

@@ -17,6 +17,7 @@ export const navGroups: NavGroup[] = [
     label: "المالية والجودة",
     items: [
       { id: "vouchers", label: "سندات القبض والصرف", icon: "Receipt" },
+      { id: "party-statement", label: "كشف حساب مورد / عميل", icon: "FileText" },
       { id: "accounting", label: "الحسابات العامة", icon: "BookOpen" },
       { id: "currencies", label: "العملات وأسعار الصرف", icon: "Coins" },
       { id: "expiry", label: "الصلاحية والدفعات", icon: "CalendarClock" },
@@ -140,6 +141,10 @@ export const pageMeta: Record<PageId, PageMetaItem> = {
   "voucher-doc": {
     title: "محرر السند المالي",
     subtitle: "إنشاء وترحيل سند قبض أو صرف مع تخصيص الفواتير والطباعة",
+  },
+  "party-statement": {
+    title: "كشف حساب مورد / عميل",
+    subtitle: "كشف الحساب المالي الموحد معتمد مباشرة من دفتر الأستاذ العام",
   },
 };
 
