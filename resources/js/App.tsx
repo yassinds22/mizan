@@ -13,7 +13,10 @@ import { PartnersPage } from "@/modules/partners/pages/PartnersPage";
 import { AccountingPage } from "@/modules/accounting/pages/AccountingPage";
 import { JournalEntryPage } from "@/modules/accounting/pages/JournalEntryPage";
 import { TrialBalancePage } from "@/modules/accounting/pages/TrialBalancePage";
+import { AccountLedgerPage } from "@/modules/accounting/pages/AccountLedgerPage";
 import { ProfitLossPage } from "@/modules/accounting/pages/ProfitLossPage";
+import { BalanceSheetPage } from "@/modules/accounting/pages/BalanceSheetPage";
+import { VatPositionPage } from "@/modules/accounting/pages/VatPositionPage";
 import { AgingPage } from "@/modules/accounting/pages/AgingPage";
 import { PeriodClosePage } from "@/modules/accounting/pages/PeriodClosePage";
 import { ExpiryPage } from "@/modules/expiry/pages/ExpiryPage";
@@ -57,6 +60,9 @@ const VALID_PAGES: Set<string> = new Set([
   "vouchers",
   "voucher-doc",
   "party-statement",
+  "account-ledger",
+  "balance-sheet",
+  "vat-position",
 ]);
 
 const getInitialPage = (): PageId => {
@@ -79,6 +85,7 @@ export const App: React.FC = () => {
   const [voucherInitialType, setVoucherInitialType] = useState<"receipt" | "payment">("receipt");
   const [statementPartyType, setStatementPartyType] = useState<"supplier" | "customer">("supplier");
   const [statementPartyId, setStatementPartyId] = useState<number | undefined>(undefined);
+  const [selectedAccountIdForLedger, setSelectedAccountIdForLedger] = useState<number | null>(null);
 
   const setCurrentPage = (page: PageId) => {
     setCurrentPageState(page);
@@ -184,9 +191,57 @@ export const App: React.FC = () => {
       case "journal-entry":
         return <JournalEntryPage onBack={() => setCurrentPage("accounting")} />;
       case "trial-balance":
-        return <TrialBalancePage />;
+        return (
+          <TrialBalancePage
+            onNavigate={(page, params) => {
+              if (params?.account_id) setSelectedAccountIdForLedger(params.account_id);
+              setCurrentPage(page as PageId);
+            }}
+            onOpenLedger={(accId) => {
+              setSelectedAccountIdForLedger(accId);
+              setCurrentPage("account-ledger");
+            }}
+          />
+        );
+      case "account-ledger":
+        return (
+          <AccountLedgerPage
+            initialAccountId={selectedAccountIdForLedger}
+            onNavigate={(page) => setCurrentPage(page as PageId)}
+          />
+        );
       case "profit-loss":
-        return <ProfitLossPage />;
+        return (
+          <ProfitLossPage
+            onNavigate={(page, params) => {
+              if (params?.account_id) setSelectedAccountIdForLedger(params.account_id);
+              setCurrentPage(page as PageId);
+            }}
+            onOpenLedger={(accId) => {
+              setSelectedAccountIdForLedger(accId);
+              setCurrentPage("account-ledger");
+            }}
+          />
+        );
+      case "balance-sheet":
+        return (
+          <BalanceSheetPage
+            onNavigate={(page, params) => {
+              if (params?.account_id) setSelectedAccountIdForLedger(params.account_id);
+              setCurrentPage(page as PageId);
+            }}
+            onOpenLedger={(accId) => {
+              setSelectedAccountIdForLedger(accId);
+              setCurrentPage("account-ledger");
+            }}
+          />
+        );
+      case "vat-position":
+        return (
+          <VatPositionPage
+            onNavigate={(page) => setCurrentPage(page as PageId)}
+          />
+        );
       case "aging":
         return <AgingPage />;
       case "period-close":

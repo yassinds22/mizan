@@ -72,6 +72,15 @@ Route::prefix('v1/accounting')->group(function () {
 
     // 4. كشوفات الحساب المالية للعملاء والموردين (Party Statements Engine)
     Route::get('statements/party', [\App\Http\Controllers\Api\V1\Accounting\PartyStatementController::class, 'index']);
+
+    // 5. محرك وشاشات التقارير والقوائم المالية الختامية (Financial Reports & Statements Engine)
+    Route::prefix('reports')->group(function () {
+        Route::get('trial-balance', [\App\Http\Controllers\Api\V1\Accounting\FinancialReportController::class, 'trialBalance']);
+        Route::get('account-ledger/{accountId}', [\App\Http\Controllers\Api\V1\Accounting\FinancialReportController::class, 'accountLedger']);
+        Route::get('income-statement', [\App\Http\Controllers\Api\V1\Accounting\FinancialReportController::class, 'incomeStatement']);
+        Route::get('balance-sheet', [\App\Http\Controllers\Api\V1\Accounting\FinancialReportController::class, 'balanceSheet']);
+        Route::get('vat-position', [\App\Http\Controllers\Api\V1\Accounting\FinancialReportController::class, 'vatPosition']);
+    });
 });
 
 Route::prefix('v1/products')->group(function () {
