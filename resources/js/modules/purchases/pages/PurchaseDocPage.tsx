@@ -23,6 +23,7 @@ import { money } from "@/utils/formatters";
 import { productsApi, Item, ItemUnit } from "@/api/products";
 import { purchasesApi, Supplier, PurchaseInvoice } from "@/api/purchases";
 import { SupplierModal } from "../components/SupplierModal";
+import { QuickItemModal } from "../components/QuickItemModal";
 
 interface PurchaseLineState {
   id: string;
@@ -67,6 +68,7 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
   // Modals & UI states
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productPickerSearch, setProductPickerSearch] = useState("");
+  const [showQuickItemModal, setShowQuickItemModal] = useState(false);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [currentSavedPurchase, setCurrentSavedPurchase] = useState<PurchaseInvoice | null>(null);
@@ -968,27 +970,90 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
         isOpen={showProductPicker}
         onClose={() => setShowProductPicker(false)}
         title="اختيار صنف غذائي من الكتالوج"
-        subtitle="ابحث باسم الصنف أو الباركود لإضافته لفاتورة الشراء"
-        maxWidth="680px"
+        subtitle="ابحث باسم الصنف أو الباركود لإضافته لفاتورة الشراء، أو أنشئ صنفاً جديداً فوراً"
+        maxWidth="720px"
       >
-        <div style={{ direction: "rtl", display: "flex", flexDirection: "column", gap: 12 }}>
-          <input
-            type="text"
-            placeholder="بحث باسم الصنف أو SKU..."
-            value={productPickerSearch}
-            onChange={(e) => setProductPickerSearch(e.target.value)}
-            autoFocus
-          />
+        <div style={{ direction: "rtl", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="text"
+              placeholder="بحث باسم الصنف أو الباركود أو SKU..."
+              value={productPickerSearch}
+              onChange={(e) => setProductPickerSearch(e.target.value)}
+              autoFocus
+              style={{ flex: 1, padding: "0.6rem 0.8rem", borderRadius: "8px", border: "1.5px solid #cbd5e1" }}
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowQuickItemModal(true)}
+              style={{
+                backgroundColor: "#ecfdf5",
+                color: "#059669",
+                border: "1.5px solid #059669",
+                fontWeight: 800,
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "0.6rem 1rem",
+                borderRadius: "8px",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              <Plus size={15} /> إنشاء صنف جديد
+            </button>
+          </div>
 
           <div style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
-            {items
-              .filter(
+            {(() => {
+              const filtered = items.filter(
                 (it) =>
                   !productPickerSearch ||
                   it.name_ar.toLowerCase().includes(productPickerSearch.toLowerCase()) ||
-                  it.sku.toLowerCase().includes(productPickerSearch.toLowerCase())
-              )
-              .map((it) => (
+                  it.sku.toLowerCase().includes(productPickerSearch.toLowerCase()) ||
+                  (it.barcode && it.barcode.toLowerCase().includes(productPickerSearch.toLowerCase()))
+              );
+
+              if (filtered.length === 0) {
+                return (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "2rem 1rem",
+                      background: "#f8fafc",
+                      borderRadius: "10px",
+                      border: "1.5px dashed #cbd5e1",
+                    }}
+                  >
+                    <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "0.75rem" }}>
+                      لم يتم العثور على أي صنف يطابق <strong>"{productPickerSearch}"</strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickItemModal(true)}
+                      style={{
+                        backgroundColor: "#059669",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "0.6rem 1.25rem",
+                        fontWeight: 700,
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <Plus size={16} /> إنشاء الصنف [{productPickerSearch || "جديد"}] الآن وإدراجه في الفاتورة
+                    </button>
+                  </div>
+                );
+              }
+
+              return filtered.map((it) => (
                 <div
                   key={it.id}
                   style={{
@@ -1004,26 +1069,40 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
                   <div>
                     <div style={{ fontWeight: 800, color: "#0f172a" }}>{it.name_ar}</div>
                     <div style={{ fontSize: 11, color: "#64748b" }}>
-                      SKU: {it.sku} · المخزون الحالي: {it.stock_quantity ?? 0}
+                      SKU: {it.sku} {it.barcode ? `· باركود: ${it.barcode}` : ""} · المخزون الحالي: {it.stock_quantity ?? 0}
                     </div>
                   </div>
                   <button
                     type="button"
                     className="btn btn-primary"
-                    style={{ height: 32, padding: "0 12px", fontSize: 12, background: "#059669" }}
+                    style={{ height: 32, padding: "0 14px", fontSize: 12, background: "#059669" }}
                     onClick={() => {
                       addNewLineWithItem(it);
                       setShowProductPicker(false);
                       showToast(`تمت إضافة: ${it.name_ar}`);
                     }}
                   >
-                    <Plus size={13} /> إضافة
+                    <Plus size={13} /> إضافة للفاتورة
                   </button>
                 </div>
-              ))}
+              ));
+            })()}
           </div>
         </div>
       </Modal>
+
+      {/* Quick Add Item Modal */}
+      <QuickItemModal
+        isOpen={showQuickItemModal}
+        onClose={() => setShowQuickItemModal(false)}
+        initialName={productPickerSearch}
+        onSuccess={(newItem) => {
+          setItems((prev) => [newItem, ...prev]);
+          addNewLineWithItem(newItem);
+          setShowProductPicker(false);
+          showToast(`تم إنشاء الصنف [${newItem.name_ar}] وإضافته للفاتورة مباشرة! 🎉`);
+        }}
+      />
 
       {/* Quick Add Supplier Modal */}
       <SupplierModal

@@ -100,6 +100,8 @@ export interface CreateItemPayload {
     conversion_factor: number;
     barcode?: string;
     is_base_unit?: boolean;
+    is_sale_unit?: boolean;
+    is_purchase_unit?: boolean;
     prices?: {
       id?: number;
       price_tier: string;
