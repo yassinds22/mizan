@@ -2690,8 +2690,65 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
         }
       >
         <div>
+          {/* Scoped Print Styles */}
+          <style>{`
+            @media print {
+              @page {
+                size: ${printFormat === "thermal" ? "80mm auto" : "A4 portrait"};
+                margin: ${printFormat === "thermal" ? "2mm" : "8mm 10mm"};
+              }
+              html, body {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+              body * {
+                visibility: hidden;
+              }
+              .modal-backdrop, .modal, .modal-body {
+                position: static !important;
+                display: block !important;
+                background: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: visible !important;
+              }
+              .modal-head, .modal-foot, .no-print, .screen-only, header, nav, aside {
+                display: none !important;
+              }
+              #official-print-sales-invoice, #official-print-sales-invoice * {
+                visibility: visible !important;
+              }
+              #official-print-sales-invoice {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: ${printFormat === "thermal" ? "76mm" : "100%"} !important;
+                max-width: ${printFormat === "thermal" ? "76mm" : "100%"} !important;
+                margin: 0 auto !important;
+                padding: ${printFormat === "thermal" ? "6px" : "20px"} !important;
+                border: ${printFormat === "thermal" ? "none" : "1px solid #cbd5e1"} !important;
+                box-shadow: none !important;
+                box-sizing: border-box !important;
+                background: #ffffff !important;
+              }
+            }
+          `}</style>
+
           {/* Format Switcher */}
           <div
+            className="no-print"
             style={{
               display: "flex",
               justifyContent: "center",
@@ -2729,6 +2786,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
 
           {/* Printable Invoice Container */}
           <div
+            id="official-print-sales-invoice"
             className="print-container"
             style={{
               maxWidth: printFormat === "thermal" ? "320px" : "100%",
@@ -2918,7 +2976,63 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       >
         {activeSalesReturn && (
           <div>
+            {/* Scoped Print Styles */}
+            <style>{`
+              @media print {
+                @page {
+                  size: A4 portrait;
+                  margin: 8mm 10mm;
+                }
+                  html, body {
+                    background: #ffffff !important;
+                    color: #0f172a !important;
+                    font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                  }
+                  body * {
+                    visibility: hidden;
+                  }
+                  .modal-backdrop, .modal, .modal-body {
+                    position: static !important;
+                    display: block !important;
+                    background: transparent !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    overflow: visible !important;
+                  }
+                  .modal-head, .modal-foot, .no-print, .screen-only, header, nav, aside {
+                    display: none !important;
+                  }
+                  #official-print-credit-note, #official-print-credit-note * {
+                    visibility: visible !important;
+                  }
+                  #official-print-credit-note {
+                    display: block !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    margin: 0 !important;
+                    padding: 16px !important;
+                    border: 1px solid #cbd5e1 !important;
+                    box-shadow: none !important;
+                    box-sizing: border-box !important;
+                    background: #ffffff !important;
+                  }
+                }
+              `}</style>
+
             <div
+              id="official-print-credit-note"
               className="print-container"
               style={{
                 maxWidth: "100%",

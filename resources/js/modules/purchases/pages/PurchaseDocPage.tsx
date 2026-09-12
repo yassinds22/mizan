@@ -20,10 +20,16 @@ import {
 import { AlertModal, AlertType } from "@/components/ui/AlertModal";
 import { Modal } from "@/components/ui/Modal";
 import { money } from "@/utils/formatters";
+import { tafqeet } from "@/utils/tafqeet";
+import { coreApi } from "@/api/core";
+import { treasuryApi, VoucherRecord } from "@/api/treasury";
 import { productsApi, Item, ItemUnit } from "@/api/products";
 import { purchasesApi, Supplier, PurchaseInvoice } from "@/api/purchases";
 import { SupplierModal } from "../components/SupplierModal";
 import { QuickItemModal } from "../components/QuickItemModal";
+import { QuickPaymentModal } from "../components/QuickPaymentModal";
+import QRCode from "qrcode";
+import { Banknote } from "lucide-react";
 
 interface PurchaseLineState {
   id: string;
@@ -69,9 +75,24 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productPickerSearch, setProductPickerSearch] = useState("");
   const [showQuickItemModal, setShowQuickItemModal] = useState(false);
+  const [showQuickPaymentModal, setShowQuickPaymentModal] = useState(false);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [currentSavedPurchase, setCurrentSavedPurchase] = useState<PurchaseInvoice | null>(null);
+  const [invoicePaidAmount, setInvoicePaidAmount] = useState(0);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+  const [companySettings, setCompanySettings] = useState<any>({
+    company_name: "ميزان لتجارة وتوزيع المواد الغذائية",
+    vat_number: "300000000000003",
+    commercial_register: "1010000000",
+    address: "اليمن - المركز الرئيسي",
+    phone: "+967 1 234567",
+  });
+  const [baseCurrency, setBaseCurrency] = useState<{ code: string; name: string; symbol: string }>({
+    code: "SAR",
+    name: "ريال سعودي",
+    symbol: "ر.س",
+  });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: "success" | "info" | "error" } | null>(null);
@@ -132,6 +153,22 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
             if (bList.length > 0) setBranchId(bList[0].id);
           }
         } catch (e) {}
+
+        // Company settings & currency
+        coreApi.getSettings().then((res) => {
+          if (res) setCompanySettings((prev: any) => ({ ...prev, ...res }));
+        }).catch(() => {});
+
+        coreApi.getCurrencies().then((curs) => {
+          const base = curs.find((c) => c.is_base_currency) || curs[0];
+          if (base) {
+            setBaseCurrency({
+              code: base.code,
+              name: base.name,
+              symbol: base.symbol || base.code,
+            });
+          }
+        }).catch(() => {});
 
         if (purchaseIdToView) {
           const inv = await purchasesApi.getInvoice(purchaseIdToView);
@@ -285,6 +322,48 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
     if (selectedSupplierId === "cash") return null;
     return suppliers.find((s) => s.id === selectedSupplierId) || null;
   }, [selectedSupplierId, suppliers]);
+
+  // Financial Balances & Payment Status Calculations
+  const totalInvAmount = currentSavedPurchase ? Number(currentSavedPurchase.total_amount) : calculations.netTotal;
+  const remainingInvAmount = Math.max(0, totalInvAmount - invoicePaidAmount);
+  const paymentStatus: "unpaid" | "partially_paid" | "paid" =
+    invoicePaidAmount <= 0.001
+      ? "unpaid"
+      : invoicePaidAmount >= totalInvAmount - 0.001
+      ? "paid"
+      : "partially_paid";
+
+  // Load Open Invoices allocations for this purchase invoice whenever currentSavedPurchase changes
+  useEffect(() => {
+    if (currentSavedPurchase && currentSavedPurchase.supplier_id) {
+      treasuryApi.getOpenInvoices("supplier", currentSavedPurchase.supplier_id)
+        .then((openInvs) => {
+          const found = openInvs.find((i) => i.invoice_id === currentSavedPurchase.id);
+          if (found) {
+            setInvoicePaidAmount(found.paid_amount);
+          } else {
+            if (currentSavedPurchase.status.value === "posted") {
+              // Not in open invoices list could mean fully settled
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentSavedPurchase]);
+
+  // QR Code Generation for Invoice Printing
+  useEffect(() => {
+    if (!showPrint) return;
+    const invNumber = currentSavedPurchase?.invoice_number || invoiceNumber || "PINV-DRAFT";
+    const total = totalInvAmount;
+    const invDate = invoiceDate;
+    const qrData = `فاتورة شراء ومستند استلام: ${invNumber}\nالمنشأة: ${companySettings.company_name}\nالرقم الضريبي: ${companySettings.vat_number || "—"}\nالتاريخ: ${invDate}\nالإجمالي: ${total} ${baseCurrency.symbol || baseCurrency.name}`;
+    QRCode.toDataURL(qrData, {
+      width: 120,
+      margin: 1,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    }).then(setQrCodeUrl).catch(() => {});
+  }, [showPrint, currentSavedPurchase, invoiceNumber, totalInvAmount, invoiceDate, companySettings, baseCurrency]);
 
   // Save / Post handler
   const handleSaveInvoice = async (postImmediately: boolean) => {
@@ -454,15 +533,15 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
                 {currentSavedPurchase && (
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: 800,
-                      padding: "2px 10px",
-                      borderRadius: 20,
+                      padding: "2px 8px",
+                      borderRadius: 6,
                       background:
                         currentSavedPurchase.status.value === "posted"
                           ? "#ecfdf5"
                           : currentSavedPurchase.status.value === "draft"
-                          ? "#fef3c7"
+                          ? "#fffbeb"
                           : "#fef2f2",
                       color:
                         currentSavedPurchase.status.value === "posted"
@@ -1115,80 +1194,469 @@ export const PurchaseDocPage: React.FC<PurchaseDocPageProps> = ({
         }}
       />
 
-      {/* Print Preview Modal */}
+      {/* Official Print Preview Modal (A4 Goods Receiving & Purchase Invoice) */}
       <Modal
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
-        title={`معاينة طباعة — فاتورة مشتريات واستلام #${invoiceNumber || "مسودة"}`}
-        subtitle="مستند رسمي لاستلام بضاعة وفاتورة شراء ومطابقة المورد"
+        title={`معاينة رسمية — فاتورة شراء ومستند استلام بضاعة #${invoiceNumber || currentSavedPurchase?.invoice_number || "مسودة"}`}
+        subtitle="وثيقة رسمية معتمدة لإثبات استلام البضاعة ومطابقة المورد والقيد المحاسبي"
+        maxWidth="920px"
         footer={
-          <div style={{ display: "flex", gap: 10 }}>
-            <button type="button" className="btn btn-ghost" onClick={() => setShowPrint(false)}>
-              إغلاق
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", flexWrap: "wrap", gap: "0.75rem" }}>
+            <button type="button" className="btn btn-outline" onClick={() => setShowPrint(false)} style={{ padding: "0.6rem 1.25rem", borderRadius: "8px" }}>
+              إغلاق المعاينة
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => window.print()}
-              style={{ background: "#059669" }}
+              style={{
+                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                color: "#ffffff",
+                padding: "0.65rem 1.75rem",
+                borderRadius: "8px",
+                fontWeight: 800,
+                fontSize: "1rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(5, 150, 105, 0.3)",
+              }}
             >
-              <Printer size={15} /> طباعة الآن
+              <Printer size={18} /> أمر الطباعة الفورية (A4)
             </button>
           </div>
         }
       >
-        <div style={{ padding: "16px 20px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8 }}>
-          <div style={{ textAlign: "center", marginBottom: 16 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>ميزان لتجارة وتوزيع المواد الغذائية</h2>
-            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>سند استلام بضاعة ومشتريات (Goods Receiving Note)</div>
-          </div>
+        <div style={{ padding: "10px 4px", maxHeight: "74vh", overflowY: "auto" }}>
+          {/* Scoped Print Styles */}
+          <style>{`
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 8mm 10mm;
+              }
+              html, body {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              body * {
+                visibility: hidden;
+              }
+              #official-print-purchase, #official-print-purchase * {
+                visibility: visible !important;
+              }
+              #official-print-purchase {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+              }
+              .screen-only, .no-print, header, nav, aside {
+                display: none !important;
+              }
+            }
+          `}</style>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12, marginBottom: 16, padding: "8px 12px", background: "#f8fafc", borderRadius: 6 }}>
-            <div><strong>رقم الفاتورة: </strong> {invoiceNumber || "—"}</div>
-            <div><strong>فاتورة المورد: </strong> {supplierInvoiceNumber || "—"}</div>
-            <div><strong>المورد: </strong> {selectedSupplier ? selectedSupplier.name_ar : "مشتريات نقدية عامة"}</div>
-            <div><strong>تاريخ الاستلام: </strong> {invoiceDate}</div>
-            <div><strong>طريقة السداد: </strong> {paymentMethod === "credit" ? "آجل" : paymentMethod === "cash" ? "نقدي" : "تحويل بنكي"}</div>
-          </div>
+          <div
+            id="official-print-purchase"
+            style={{
+              border: "2px solid #0f172a",
+              borderRadius: "8px",
+              padding: "20px 24px",
+              background: "#ffffff",
+              color: "#0f172a",
+              fontFamily: "'Cairo', sans-serif",
+              boxShadow: "0 4px 15px rgba(0,0,0,0.06)",
+              direction: "rtl",
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr 1.2fr 1.1fr",
+                alignItems: "center",
+                borderBottom: "2px solid #0f172a",
+                paddingBottom: "14px",
+                marginBottom: "16px",
+                gap: "10px",
+              }}
+            >
+              <div style={{ textAlign: "right" }}>
+                <h2 style={{ margin: "0 0 4px", fontSize: "18px", fontWeight: 900, color: "#0f172a" }}>
+                  {companySettings.company_name}
+                </h2>
+                <div style={{ fontSize: "11px", color: "#334155", lineHeight: "1.6" }}>
+                  <div>الرقم الضريبي: <strong>{companySettings.vat_number || "—"}</strong></div>
+                  <div>السجل التجاري: <strong>{companySettings.commercial_register || "—"}</strong></div>
+                  <div>العنوان: {companySettings.address || "اليمن - المركز الرئيسي"}</div>
+                  {companySettings.phone && <div>الهاتف: {companySettings.phone}</div>}
+                </div>
+              </div>
 
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
-            <thead>
-              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #cbd5e1" }}>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>الصنف</th>
-                <th style={{ padding: "6px 8px", textAlign: "center" }}>الكمية</th>
-                <th style={{ padding: "6px 8px", textAlign: "left" }}>سعر الوحدة</th>
-                <th style={{ padding: "6px 8px", textAlign: "left" }}>الخصم</th>
-                <th style={{ padding: "6px 8px", textAlign: "left" }}>الصافي</th>
-                <th style={{ padding: "6px 8px", textAlign: "left" }}>الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => {
-                const q = Number(l.quantity) || 0;
-                const p = Number(l.unit_price) || 0;
-                const d = Number(l.discount_amount) || 0;
-                const net = Math.max(0, q * p - d);
-                const tot = net * 1.15;
-                return (
-                  <tr key={i} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                    <td style={{ padding: "6px 8px" }}>{l.item_name_ar}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "center" }}>{l.quantity} {l.unit_name}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "left" }}>{money(p)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "left" }}>{money(d)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "left" }}>{money(net)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "left", fontWeight: 700 }}>{money(tot)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              <div style={{ textAlign: "center" }}>
+                <div
+                  style={{
+                    border: "2px solid #059669",
+                    backgroundColor: "#ecfdf5",
+                    padding: "8px 14px",
+                    borderRadius: "8px",
+                    display: "inline-block",
+                  }}
+                >
+                  <div style={{ fontSize: "16px", fontWeight: 900, color: "#065f46", margin: 0 }}>
+                    فاتورة شراء ومستند استلام بضاعة
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "10.5px",
+                      fontWeight: 700,
+                      color: "#047857",
+                      letterSpacing: "1px",
+                      marginTop: "2px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    PURCHASE INVOICE & GOODS RECEIPT
+                  </div>
+                </div>
+                <div style={{ fontSize: "10px", color: "#059669", fontWeight: 700, marginTop: "4px" }}>
+                  ● وثيقة رسمية معتمدة ومطابقة للمخزون والحسابات
+                </div>
+              </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 900, borderTop: "2px dashed #cbd5e1", paddingTop: 10 }}>
-            <span>الإجمالي النهائي شامل الضريبة:</span>
-            <span style={{ color: "#059669" }}>{money(calculations.netTotal)}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", justifyContent: "flex-end" }}>
+                {qrCodeUrl && (
+                  <div style={{ textAlign: "center" }}>
+                    <img
+                      src={qrCodeUrl}
+                      alt="QR Code"
+                      style={{
+                        width: "75px",
+                        height: "75px",
+                        borderRadius: "4px",
+                        border: "1px solid #cbd5e1",
+                        display: "block",
+                      }}
+                    />
+                    <div style={{ fontSize: "8.5px", color: "#64748b", marginTop: "2px", fontWeight: 700 }}>
+                      تحقق إلكتروني
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    border: "1.5px solid #cbd5e1",
+                    borderRadius: "6px",
+                    background: "#f8fafc",
+                    padding: "8px 10px",
+                    minWidth: "175px",
+                    fontSize: "11px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ color: "#64748b" }}>رقم الفاتورة:</span>
+                    <strong style={{ fontFamily: "monospace", fontSize: "12.5px" }}>
+                      {invoiceNumber || currentSavedPurchase?.invoice_number || "PINV-DRAFT"}
+                    </strong>
+                  </div>
+                  {supplierInvoiceNumber && (
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                      <span style={{ color: "#64748b" }}>فاتورة المورد:</span>
+                      <strong>{supplierInvoiceNumber}</strong>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ color: "#64748b" }}>تاريخ الاستلام:</span>
+                    <strong>{invoiceDate}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "#64748b" }}>طريقة السداد:</span>
+                    <strong>{paymentMethod === "credit" ? "آجل (ذمة)" : paymentMethod === "cash" ? "نقداً" : "تحويل بنكي"}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Supplier Information Strip */}
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #cbd5e1",
+                borderRadius: "6px",
+                padding: "10px 14px",
+                marginBottom: "16px",
+                display: "grid",
+                gridTemplateColumns: "1.5fr 1fr 1fr",
+                fontSize: "12px",
+                gap: "10px",
+              }}
+            >
+              <div>
+                <span style={{ color: "#64748b" }}>المورد / الطرف الدائن: </span>
+                <strong style={{ fontSize: "13px", color: "#0f172a" }}>
+                  {selectedSupplier ? selectedSupplier.name_ar : currentSavedPurchase?.supplier_name || "مشتريات نقدية عامة"}
+                </strong>
+                {selectedSupplier?.code && (
+                  <span style={{ fontSize: "11px", color: "#64748b", marginRight: "6px" }}>
+                    [{selectedSupplier.code}]
+                  </span>
+                )}
+              </div>
+              <div>
+                <span style={{ color: "#64748b" }}>الرقم الضريبي للمورد: </span>
+                <strong>{selectedSupplier?.tax_number || currentSavedPurchase?.supplier_tax_number || "—"}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#64748b" }}>حالة السداد: </span>
+                <strong style={{ color: paymentStatus === "paid" ? "#059669" : paymentStatus === "partially_paid" ? "#d97706" : "#dc2626" }}>
+                  {paymentStatus === "paid"
+                    ? "مسددة بالكامل"
+                    : paymentStatus === "partially_paid"
+                    ? `مسددة جزئياً (${money(invoicePaidAmount)})`
+                    : "غير مسددة (مستحقة)"}
+                </strong>
+              </div>
+            </div>
+
+            {/* Products Table */}
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11.5px", marginBottom: "16px" }}>
+              <thead>
+                <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #cbd5e1" }}>
+                  <th style={{ padding: "8px 6px", textAlign: "center", width: "35px" }}>#</th>
+                  <th style={{ padding: "8px", textAlign: "right" }}>الصنف والوصف</th>
+                  <th style={{ padding: "8px", textAlign: "right" }}>SKU / باركود</th>
+                  <th style={{ padding: "8px", textAlign: "center" }}>الكمية</th>
+                  <th style={{ padding: "8px", textAlign: "center" }}>الوحدة</th>
+                  <th style={{ padding: "8px", textAlign: "left" }}>سعر الشراء</th>
+                  <th style={{ padding: "8px", textAlign: "left" }}>الخصم</th>
+                  <th style={{ padding: "8px", textAlign: "left" }}>الصافي</th>
+                  <th style={{ padding: "8px", textAlign: "left" }}>ضريبة 15%</th>
+                  <th style={{ padding: "8px", textAlign: "left" }}>الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, idx) => {
+                  const q = Number(l.quantity) || 0;
+                  const p = Number(l.unit_price) || 0;
+                  const d = Number(l.discount_amount) || 0;
+                  const net = Math.max(0, q * p - d);
+                  const tax = net * ((Number(l.tax_rate) || 15) / 100);
+                  const tot = net + tax;
+
+                  return (
+                    <tr key={idx} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                      <td style={{ padding: "8px 6px", textAlign: "center", color: "#64748b" }}>{idx + 1}</td>
+                      <td style={{ padding: "8px", fontWeight: 700, color: "#0f172a" }}>{l.item_name_ar}</td>
+                      <td style={{ padding: "8px", fontFamily: "monospace", color: "#475569", fontSize: "10.5px" }}>
+                        {l.item_sku}
+                      </td>
+                      <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{l.quantity}</td>
+                      <td style={{ padding: "8px", textAlign: "center", color: "#475569" }}>{l.unit_name}</td>
+                      <td style={{ padding: "8px", textAlign: "left" }}>{money(p)}</td>
+                      <td style={{ padding: "8px", textAlign: "left" }}>{money(d)}</td>
+                      <td style={{ padding: "8px", textAlign: "left" }}>{money(net)}</td>
+                      <td style={{ padding: "8px", textAlign: "left", color: "#64748b" }}>{money(tax)}</td>
+                      <td style={{ padding: "8px", textAlign: "left", fontWeight: 800, color: "#0f172a" }}>
+                        {money(tot)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Financial Summary & Tafqeet Box */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.4fr 1fr",
+                gap: "14px",
+                marginBottom: "16px",
+              }}
+            >
+              {/* Tafqeet and Payment Balances */}
+              <div
+                style={{
+                  border: "1.5px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "12px 14px",
+                  background: "#f8fafc",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b" }}>
+                    المبلغ الإجمالي كتابة وتفقيطاً:
+                  </div>
+                  <div style={{ fontSize: "13.5px", fontWeight: 800, color: "#065f46", marginTop: "4px" }}>
+                    {tafqeet(totalInvAmount, baseCurrency.name, baseCurrency.code === "SAR" ? "هللة" : "فلس")}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                    marginTop: "12px",
+                    borderTop: "1px dashed #cbd5e1",
+                    paddingTop: "8px",
+                    fontSize: "11px",
+                  }}
+                >
+                  <div>
+                    <span style={{ color: "#64748b" }}>المسدد حتى الآن: </span>
+                    <strong style={{ color: "#059669" }}>{money(invoicePaidAmount)} {baseCurrency.symbol || baseCurrency.name}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>المتبقي بذمة المنشأة: </span>
+                    <strong style={{ color: remainingInvAmount > 0 ? "#dc2626" : "#059669" }}>
+                      {money(remainingInvAmount)} {baseCurrency.symbol || baseCurrency.name}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Totals Table */}
+              <div
+                style={{
+                  border: "1.5px solid #cbd5e1",
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                  fontSize: "11.5px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                  <span style={{ color: "#64748b" }}>إجمالي البضاعة قبل الخصم:</span>
+                  <strong>{money(calculations.grossSubtotal)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", borderBottom: "1px solid #e2e8f0" }}>
+                  <span style={{ color: "#64748b" }}>إجمالي الخصومات:</span>
+                  <strong style={{ color: "#dc2626" }}>-{money(calculations.totalDiscount)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                  <span style={{ color: "#64748b" }}>الصافي الخاضع للضريبة:</span>
+                  <strong>{money(calculations.netSubtotal)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", borderBottom: "1px solid #e2e8f0" }}>
+                  <span style={{ color: "#64748b" }}>ضريبة القيمة المضافة (15%):</span>
+                  <strong>{money(calculations.totalTax)}</strong>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "10px 12px",
+                    background: "#ecfdf5",
+                    fontSize: "13.5px",
+                    fontWeight: 900,
+                    color: "#065f46",
+                  }}
+                >
+                  <span>الإجمالي النهائي المستحق:</span>
+                  <span>{money(totalInvAmount)} {baseCurrency.symbol || baseCurrency.name}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Official Signatures */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "12px",
+                borderTop: "1.5px solid #0f172a",
+                paddingTop: "14px",
+                textAlign: "center",
+                marginTop: "16px",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>أمين المستودع المستلم</div>
+                <div style={{ height: "36px" }}></div>
+                <div style={{ borderTop: "1px dashed #94a3b8", fontSize: "10px", color: "#64748b", paddingTop: "3px" }}>
+                  استلام وفحص البضاعة
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>مسؤول المشتريات</div>
+                <div style={{ height: "36px" }}></div>
+                <div style={{ borderTop: "1px dashed #94a3b8", fontSize: "10px", color: "#64748b", paddingTop: "3px" }}>
+                  المطابقة والاعتماد
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>المحاسب المالي</div>
+                <div style={{ height: "36px" }}></div>
+                <div style={{ borderTop: "1px dashed #94a3b8", fontSize: "10px", color: "#64748b", paddingTop: "3px" }}>
+                  المراجعة وقيد اليومية
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>المدير المالي / الختم</div>
+                <div style={{ height: "36px" }}></div>
+                <div style={{ borderTop: "1px dashed #94a3b8", fontSize: "10px", color: "#64748b", paddingTop: "3px" }}>
+                  الاعتماد والختم الرسمي
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Notice */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderTop: "1px solid #e2e8f0",
+                marginTop: "14px",
+                paddingTop: "6px",
+                fontSize: "9px",
+                color: "#94a3b8",
+              }}
+            >
+              <span>نظام ميزان ERP — تعتبر هذه الفاتورة مستند رسمي لاستلام بضاعة وإثبات مديونية الشراء</span>
+              <span>تاريخ ووقت الطباعة: {new Date().toLocaleString("ar-YE")}</span>
+              <span>صفحة 1 من 1</span>
+            </div>
           </div>
         </div>
       </Modal>
+
+      {/* Quick Payment Modal (Treasury Payment Voucher Engine) */}
+      <QuickPaymentModal
+        isOpen={showQuickPaymentModal}
+        onClose={() => setShowQuickPaymentModal(false)}
+        invoice={currentSavedPurchase}
+        onSuccess={(voucher, allocatedAmount) => {
+          setInvoicePaidAmount((prev) => prev + allocatedAmount);
+          showToast(`تم صرف وترحيل سند الصرف رقم [${voucher.voucher_number}] بمبلغ ${money(allocatedAmount)} بنجاح! 💵`);
+          showCenterAlert(
+            `تم بنجاح إصدار وترحيل سند صرف مالي رقم [${voucher.voucher_number}] وخصم مبلغ ${money(allocatedAmount)} من الخزينة لحساب المورد وتخصيصه للفاتورة.`,
+            "success",
+            "تم سداد الفاتورة بنجاح 🎉",
+            `رقم السند: ${voucher.voucher_number} — المتبقي على الفاتورة: ${money(Math.max(0, remainingInvAmount - allocatedAmount))}`
+          );
+        }}
+      />
 
       {/* Luxury Alert Modal */}
       <AlertModal

@@ -92,6 +92,8 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
     amount: number | string;
     partyName: string;
     isPosted: boolean;
+    previousBalance: number | null;
+    remainingBalance: number | null;
   }>({
     isOpen: false,
     voucherNumber: "",
@@ -99,6 +101,8 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
     amount: 0,
     partyName: "",
     isPosted: false,
+    previousBalance: null,
+    remainingBalance: null,
   });
 
   // QR Code & Print Preview Modal
@@ -346,6 +350,14 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
         saved = await treasuryApi.createVoucher(payload);
       }
 
+      const prevBal = partyType === "customer"
+        ? (selectedCustomer ? Number(selectedCustomer.balance) : null)
+        : partyType === "supplier"
+        ? (selectedSupplier ? Number(selectedSupplier.balance) : null)
+        : null;
+
+      const remBal = projectedBalance !== null ? Number(projectedBalance) : null;
+
       setCurrentVoucher(saved);
       setSuccessModal({
         isOpen: true,
@@ -354,6 +366,8 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
         amount: saved.amount,
         partyName: saved.party_name || partyName,
         isPosted: saved.status === "posted",
+        previousBalance: prevBal,
+        remainingBalance: remBal,
       });
     } catch (err: any) {
       alert("حدث خطأ أثناء الحفظ: " + (err.response?.data?.message || err.message));
@@ -1801,19 +1815,70 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
                   <span style={{ fontWeight: 700, color: "#1e293b" }}>{successModal.partyName}</span>
                 </div>
               )}
+
+              {/* Financial Settlement Breakdown (المسدد والمتبقي) */}
               <div
                 style={{
+                  background: "#f8fafc",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "10px 12px",
+                  marginTop: "6px",
                   display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  borderTop: "1px dashed #cbd5e1",
-                  paddingTop: "0.5rem",
+                  flexDirection: "column",
+                  gap: "6px",
+                  fontSize: "12px",
                 }}
               >
-                <span style={{ color: "#64748b", fontWeight: 700 }}>المبلغ:</span>
-                <span style={{ fontWeight: 900, color: "#059669", fontSize: "1.1rem" }}>
-                  {money(Number(successModal.amount))} {baseCurrency.symbol || baseCurrency.name}
-                </span>
+                {successModal.previousBalance !== null && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: "#64748b" }}>الرصيد السابق (المستحق):</span>
+                    <span style={{ fontWeight: 700, color: "#1e293b" }}>
+                      {money(Number(successModal.previousBalance))} {baseCurrency.symbol || baseCurrency.name}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: "#059669", fontWeight: 700 }}>المبلغ المسدد الآن:</span>
+                  <span style={{ fontWeight: 900, color: "#059669", fontSize: "1.05rem" }}>
+                    {money(Number(successModal.amount))} {baseCurrency.symbol || baseCurrency.name}
+                  </span>
+                </div>
+
+                {successModal.remainingBalance !== null && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderTop: "1px dashed #cbd5e1",
+                      paddingTop: "6px",
+                      marginTop: "2px",
+                    }}
+                  >
+                    <span style={{ color: "#64748b", fontWeight: 700 }}>الرصيد المتبقي:</span>
+                    <span
+                      style={{
+                        fontWeight: 900,
+                        fontSize: "13px",
+                        color:
+                          Number(successModal.remainingBalance) > 0
+                            ? "#d97706"
+                            : Number(successModal.remainingBalance) < 0
+                            ? "#2563eb"
+                            : "#059669",
+                      }}
+                    >
+                      {money(Math.abs(Number(successModal.remainingBalance)))} {baseCurrency.symbol || baseCurrency.name}
+                      {Number(successModal.remainingBalance) === 0
+                        ? " (تمت التصفية بالكامل ✓)"
+                        : Number(successModal.remainingBalance) < 0
+                        ? " (رصيد دائن / دفعة مقدمة)"
+                        : " (متبقي بذمة الطرف)"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
