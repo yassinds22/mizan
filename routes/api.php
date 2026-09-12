@@ -138,5 +138,20 @@ Route::prefix('v1/treasury')->group(function () {
     Route::apiResource('vouchers', \App\Http\Controllers\Api\V1\Treasury\VoucherController::class);
 });
 
+Route::prefix('v1/warehouses')->group(function () {
+    Route::apiResource('{warehouse}/locations', \App\Http\Controllers\Api\V1\Warehouses\WarehouseLocationController::class)->except(['show']);
+    Route::apiResource('', \App\Http\Controllers\Api\V1\Warehouses\WarehouseController::class)->parameters(['' => 'warehouse']);
+});
 
+Route::prefix('v1/inventory')->group(function () {
+    Route::get('balances/allocate-fefo', [\App\Http\Controllers\Api\V1\Inventory\StockBalanceController::class, 'allocateFefo']);
+    Route::get('balances/item/{itemId}/summary', [\App\Http\Controllers\Api\V1\Inventory\StockBalanceController::class, 'summary']);
+    Route::get('balances', [\App\Http\Controllers\Api\V1\Inventory\StockBalanceController::class, 'index']);
+    Route::apiResource('batches', \App\Http\Controllers\Api\V1\Inventory\BatchController::class);
 
+    // حركات المخزون ودفتر أستاذ المخزون
+    Route::get('ledger', [\App\Http\Controllers\Api\V1\Inventory\StockLedgerController::class, 'index']);
+    Route::post('movements/{id}/post', [\App\Http\Controllers\Api\V1\Inventory\StockMovementController::class, 'post']);
+    Route::post('movements/{id}/cancel', [\App\Http\Controllers\Api\V1\Inventory\StockMovementController::class, 'cancel']);
+    Route::apiResource('movements', \App\Http\Controllers\Api\V1\Inventory\StockMovementController::class);
+});

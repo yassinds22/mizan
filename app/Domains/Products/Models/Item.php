@@ -87,6 +87,11 @@ class Item extends Model
         );
     }
 
+    public function batches(): HasMany
+    {
+        return $this->hasMany(\App\Domains\Inventory\Models\ItemBatch::class, 'item_id');
+    }
+
     /**
      * جلب الوحدة الأساسية للصنف
      */
