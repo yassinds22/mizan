@@ -280,7 +280,8 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
     }
     if (partyType === "supplier" && selectedSupplier) {
       const current = Number(selectedSupplier.balance);
-      return voucherType === "payment" ? current - amount : current + amount;
+      // سداد مستحقات المورد يخفض رصيده دائماً (الرصيد المتبقي = الرصيد الحالي - المبلغ المسدد)
+      return current - amount;
     }
     return null;
   };
@@ -787,11 +788,12 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
                     checked={partyType === "customer"}
                     onChange={() => {
                       setPartyType("customer");
+                      setVoucherType("receipt");
                       setPartyId(null);
                       setPartyName("");
                     }}
                   />
-                  عميل مبيعات
+                  عميل مبيعات (تحصيل قبض)
                 </label>
 
                 <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.85rem", cursor: "pointer" }}>
@@ -801,11 +803,12 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
                     checked={partyType === "supplier"}
                     onChange={() => {
                       setPartyType("supplier");
+                      setVoucherType("payment");
                       setPartyId(null);
                       setPartyName("");
                     }}
                   />
-                  مورد مشتريات
+                  مورد مشتريات (سداد صرف)
                 </label>
 
                 <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.85rem", cursor: "pointer" }}>
@@ -954,14 +957,14 @@ export const VoucherDocPage: React.FC<VoucherDocPageProps> = ({
               </div>
 
               <div>
-                <span style={{ color: "#64748b" }}>المبلغ المسدد: </span>
+                <span style={{ color: "#64748b" }}>{isReceipt ? "المبلغ المقبوض: " : "المبلغ المسدد / المصروف: "}</span>
                 <strong style={{ color: isReceipt ? "#059669" : "#dc2626" }}>{money(amount)}</strong>
               </div>
 
               <div>
-                <span style={{ color: "#64748b" }}>الرصيد المتوقع بعد السند: </span>
+                <span style={{ color: "#64748b" }}>الرصيد المتبقي بعد السند: </span>
                 <strong style={{ color: projectedBalance < 0 ? "#059669" : "#0f172a" }}>
-                  {money(projectedBalance)} {projectedBalance < 0 && "(رصيد دائن / دفعة مقدمة)"}
+                  {money(projectedBalance)} {projectedBalance < 0 && (partyType === "customer" ? "(رصيد دائن / دفعة مقدمة)" : "(دفعة مقدمة للمورد)")}
                 </strong>
               </div>
             </div>
