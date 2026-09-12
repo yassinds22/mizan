@@ -5,6 +5,7 @@ import { InventoryPage } from "@/modules/inventory/pages/InventoryPage";
 import { ItemDetailPage } from "@/modules/inventory/pages/ItemDetailPage";
 import { WarehousesPage } from "@/modules/warehouses/pages/WarehousesPage";
 import { StockMovePage } from "@/modules/warehouses/pages/StockMovePage";
+import { PhysicalStocktakePage } from "@/modules/inventory/pages/PhysicalStocktakePage";
 import { SalesPage } from "@/modules/sales/pages/SalesPage";
 import { InvoicePage } from "@/modules/sales/pages/InvoicePage";
 import { PurchasesPage } from "@/modules/purchases/pages/PurchasesPage";
@@ -47,6 +48,7 @@ const VALID_PAGES: Set<string> = new Set([
   "journal-entry",
   "warehouses",
   "stock-move",
+  "stocktake",
   "fefo",
   "waste-alerts",
   "trial-balance",
@@ -132,6 +134,8 @@ export const App: React.FC = () => {
         return <WarehousesPage />;
       case "stock-move":
         return <StockMovePage />;
+      case "stocktake":
+        return <PhysicalStocktakePage />;
       case "sales":
         return (
           <SalesPage

@@ -458,6 +458,27 @@ class AccountingSeeder extends Seeder
                 'is_leaf' => true,
                 'parent_code' => '4100',
             ],
+            // 4200 - إيرادات وأرباح تشغيلية واستثنائية أخرى
+            [
+                'code' => '4200',
+                'name_ar' => 'إيرادات وأرباح تشغيلية أخرى',
+                'name_en' => 'Other Operating Revenues & Gains',
+                'type' => AccountType::Revenue,
+                'nature' => AccountNature::Credit,
+                'level' => 2,
+                'is_leaf' => false,
+                'parent_code' => '4000',
+            ],
+            [
+                'code' => '4210',
+                'name_ar' => 'أرباح وفائض تسويات الجرد المخزني',
+                'name_en' => 'Inventory Surplus & Overages',
+                'type' => AccountType::Revenue,
+                'nature' => AccountNature::Credit,
+                'level' => 3,
+                'is_leaf' => true,
+                'parent_code' => '4200',
+            ],
 
             // ==========================================
             // 5000 - المصروفات وتكلفة المبيعات (EXPENSES)

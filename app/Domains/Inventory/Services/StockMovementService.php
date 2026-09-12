@@ -476,6 +476,39 @@ class StockMovementService
             ], $journalLines);
 
             $movement->journal_entry_id = $journalEntry->id;
+        } elseif (!$movement->from_warehouse_id && $movement->to_warehouse_id) {
+            // إذا كانت الحركة إضافة إلى مستودع (فائض جردي)
+            $surplusAccount = Account::where('code', '4210')->where('is_leaf', true)->first()
+                ?? Account::where('code', '4200')->where('is_leaf', true)->first()
+                ?? Account::where('code', '4100')->firstOrFail();
+
+            $inventoryAccount = Account::where('code', '1131')->where('is_leaf', true)->first()
+                ?? Account::where('code', '1130')->firstOrFail();
+
+            $journalLines = [
+                [
+                    'account_id' => $inventoryAccount->id,
+                    'description' => "إثبات زيادة المخزون لفائض الجرد - حركة رقم {$movement->movement_number}",
+                    'debit' => $totalCost,
+                    'credit' => 0.0,
+                ],
+                [
+                    'account_id' => $surplusAccount->id,
+                    'description' => "أرباح وفائض تسوية جرد مخزني - حركة رقم {$movement->movement_number}",
+                    'debit' => 0.0,
+                    'credit' => $totalCost,
+                ],
+            ];
+
+            $journalEntry = $this->journalService->createAndPost([
+                'branch_id' => $movement->branch_id,
+                'date' => $movement->movement_date->toDateString(),
+                'description' => "تسوية جردية فائض حركة رقم {$movement->movement_number}",
+                'reference' => $movement->movement_number,
+                'source_type' => 'manual',
+            ], $journalLines);
+
+            $movement->journal_entry_id = $journalEntry->id;
         }
     }
 }

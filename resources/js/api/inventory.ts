@@ -354,4 +354,158 @@ export const inventoryApi = {
     if (!res.ok) throw new Error(json.message || 'فشل استعلام دفتر أستاذ المخزون');
     return json.data;
   },
+
+  // 6. Physical Stocktake (الجرد المخزني الفعلي)
+  async listStocktakes(filters: Record<string, any> = {}): Promise<PhysicalStocktake[]> {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        params.append(k, String(v));
+      }
+    });
+    const url = params.toString() ? `${API_BASE}/stocktakes?${params}` : `${API_BASE}/stocktakes`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل استعلام محاضر الجرد');
+    return json.data;
+  },
+
+  async getStocktake(id: number): Promise<PhysicalStocktake> {
+    const res = await fetch(`${API_BASE}/stocktakes/${id}`, {
+      headers: { Accept: 'application/json' },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل جلب تفاصيل محضر الجرد');
+    return json.data;
+  },
+
+  async createStocktake(payload: CreateStocktakePayload): Promise<PhysicalStocktake> {
+    const res = await fetch(`${API_BASE}/stocktakes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل إنشاء جلسة الجرد';
+      throw new Error(msg);
+    }
+    return json.data;
+  },
+
+  async updateStocktakeCounts(id: number, counts: UpdateCountLinePayload[]): Promise<PhysicalStocktake> {
+    const res = await fetch(`${API_BASE}/stocktakes/${id}/counts`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ counts }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل حفظ كميات العد الفعلي';
+      throw new Error(msg);
+    }
+    return json.data;
+  },
+
+  async postStocktake(id: number): Promise<PhysicalStocktake> {
+    const res = await fetch(`${API_BASE}/stocktakes/${id}/post`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json.message || Object.values(json.errors || {}).flat().join(', ') || 'فشل ترحيل واعتماد الجرد';
+      throw new Error(msg);
+    }
+    return json.data;
+  },
+
+  async cancelStocktake(id: number): Promise<PhysicalStocktake> {
+    const res = await fetch(`${API_BASE}/stocktakes/${id}/cancel`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'فشل إلغاء محضر الجرد');
+    return json.data;
+  },
 };
+
+export type StocktakeStatus = 'draft' | 'in_progress' | 'posted' | 'cancelled';
+
+export interface PhysicalStocktakeLine {
+  id: number;
+  physical_stocktake_id: number;
+  item_id: number;
+  location_id: number | null;
+  batch_id: number | null;
+  book_quantity: number;
+  counted_quantity: number;
+  difference_quantity: number;
+  unit_cost: number;
+  difference_value: number;
+  variance_reason: string | null;
+  notes: string | null;
+  item?: {
+    id: number;
+    code: string;
+    name_ar: string;
+    name_en?: string;
+    barcode?: string | null;
+    base_uom?: { id: number; name_ar: string };
+  };
+  location?: { id: number; code: string; full_code?: string } | null;
+  batch?: { id: number; batch_number: string; expiry_date?: string } | null;
+}
+
+export interface PhysicalStocktake {
+  id: number;
+  stocktake_number: string;
+  branch_id: number;
+  warehouse_id: number;
+  location_id: number | null;
+  category_id: number | null;
+  stocktake_date: string;
+  status: StocktakeStatus;
+  scope: 'full' | 'partial';
+  is_blind: boolean;
+  freeze_movements: boolean;
+  total_items_count: number;
+  matched_items_count: number;
+  variance_items_count: number;
+  total_shortage_value: number;
+  total_surplus_value: number;
+  net_variance_value: number;
+  stock_movement_id: number | null;
+  journal_entry_id: number | null;
+  supervisor_name: string | null;
+  notes: string | null;
+  posted_at: string | null;
+  warehouse?: { id: number; name: string; code: string };
+  branch?: { id: number; name: string; code: string };
+  location?: { id: number; code: string } | null;
+  category?: { id: number; name_ar: string } | null;
+  lines?: PhysicalStocktakeLine[];
+  journal_entry?: { id: number; entry_number: string; total_debit: number } | null;
+}
+
+export interface CreateStocktakePayload {
+  warehouse_id: number;
+  branch_id?: number;
+  location_id?: number | null;
+  category_id?: number | null;
+  stocktake_date?: string;
+  scope?: 'full' | 'partial';
+  is_blind?: boolean;
+  freeze_movements?: boolean;
+  supervisor_name?: string;
+  notes?: string;
+}
+
+export interface UpdateCountLinePayload {
+  line_id: number;
+  counted_quantity: number;
+  variance_reason?: string | null;
+  notes?: string | null;
+}
+

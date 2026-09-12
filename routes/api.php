@@ -154,4 +154,13 @@ Route::prefix('v1/inventory')->group(function () {
     Route::post('movements/{id}/post', [\App\Http\Controllers\Api\V1\Inventory\StockMovementController::class, 'post']);
     Route::post('movements/{id}/cancel', [\App\Http\Controllers\Api\V1\Inventory\StockMovementController::class, 'cancel']);
     Route::apiResource('movements', \App\Http\Controllers\Api\V1\Inventory\StockMovementController::class);
+
+    // الجرد المخزني الفعلي وتسوية الفروقات (Physical Stocktake)
+    Route::put('stocktakes/{physicalStocktake}/counts', [\App\Http\Controllers\Api\V1\Inventory\PhysicalStocktakeController::class, 'updateCounts']);
+    Route::post('stocktakes/{physicalStocktake}/post', [\App\Http\Controllers\Api\V1\Inventory\PhysicalStocktakeController::class, 'post']);
+    Route::post('stocktakes/{physicalStocktake}/cancel', [\App\Http\Controllers\Api\V1\Inventory\PhysicalStocktakeController::class, 'cancel']);
+    Route::apiResource('stocktakes', \App\Http\Controllers\Api\V1\Inventory\PhysicalStocktakeController::class)
+        ->parameters(['stocktakes' => 'physicalStocktake'])
+        ->only(['index', 'store', 'show']);
 });
+

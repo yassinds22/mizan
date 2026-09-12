@@ -13,6 +13,7 @@ export type PageId =
   | "journal-entry"
   | "warehouses"
   | "stock-move"
+  | "stocktake"
   | "fefo"
   | "waste-alerts"
   | "trial-balance"
