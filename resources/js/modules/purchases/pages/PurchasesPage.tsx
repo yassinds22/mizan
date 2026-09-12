@@ -11,11 +11,14 @@ import {
   AlertCircle,
   XCircle,
   Eye,
+  RotateCcw,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { money } from "@/utils/formatters";
-import { purchasesApi, PurchaseInvoice } from "@/api/purchases";
+import { purchasesApi, PurchaseInvoice, PurchaseReturn } from "@/api/purchases";
 import { SuppliersListModal } from "../components/SuppliersListModal";
+import { PurchaseReturnModal } from "../components/PurchaseReturnModal";
+import { DebitNotePrintModal } from "../components/DebitNotePrintModal";
 
 interface PurchasesPageProps {
   onOpenDoc: (purchaseId?: number) => void;
@@ -23,6 +26,9 @@ interface PurchasesPageProps {
 
 export const PurchasesPage: React.FC<PurchasesPageProps> = ({ onOpenDoc }) => {
   const [invoices, setInvoices] = useState<PurchaseInvoice[]>([]);
+  const [returnInvoiceId, setReturnInvoiceId] = useState<number | null>(null);
+  const [recentReturn, setRecentReturn] = useState<PurchaseReturn | null>(null);
+  const [showDebitNotePrint, setShowDebitNotePrint] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -362,14 +368,44 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({ onOpenDoc }) => {
                       </span>
                     </td>
                     <td>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ height: 32, padding: "0 10px", fontSize: 12 }}
-                        onClick={() => onOpenDoc(inv.id)}
-                        title="استعراض تفاصيل الفاتورة"
-                      >
-                        <Eye size={13} /> عرض <ChevronLeft size={13} />
-                      </button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ height: 32, padding: "0 10px", fontSize: 12 }}
+                          onClick={() => onOpenDoc(inv.id)}
+                          title="استعراض تفاصيل الفاتورة"
+                        >
+                          <Eye size={13} /> عرض <ChevronLeft size={13} />
+                        </button>
+
+                        {inv.status.value === "posted" && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              height: 32,
+                              padding: "0 10px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              background: "#ecfdf5",
+                              color: "#059669",
+                              border: "1px solid #a7f3d0",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              borderRadius: 6,
+                              cursor: "pointer",
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReturnInvoiceId(inv.id);
+                            }}
+                            title="إرجاع بضاعة وإصدار إشعار مدين للمورد"
+                          >
+                            <RotateCcw size={13} /> مردود
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -383,6 +419,26 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({ onOpenDoc }) => {
       <SuppliersListModal
         isOpen={showSuppliersModal}
         onClose={() => setShowSuppliersModal(false)}
+      />
+
+      {/* Return Modal & Debit Note Print Modal */}
+      {returnInvoiceId && (
+        <PurchaseReturnModal
+          isOpen={!!returnInvoiceId}
+          onClose={() => setReturnInvoiceId(null)}
+          invoiceId={returnInvoiceId}
+          onSuccess={(ret) => {
+            setRecentReturn(ret);
+            setShowDebitNotePrint(true);
+            loadInvoices();
+          }}
+        />
+      )}
+
+      <DebitNotePrintModal
+        isOpen={showDebitNotePrint}
+        onClose={() => setShowDebitNotePrint(false)}
+        purchaseReturn={recentReturn}
       />
     </div>
   );
