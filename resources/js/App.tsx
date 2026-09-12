@@ -24,6 +24,8 @@ import { SettingsPage } from "@/modules/settings/pages/SettingsPage";
 import { CurrenciesPage } from "@/modules/accounting/pages/CurrenciesPage";
 import { UsersRolesPage } from "@/modules/settings/pages/UsersRolesPage";
 import { SystemStatesPage } from "@/modules/settings/pages/SystemStatesPage";
+import { VouchersPage } from "@/modules/treasury/pages/VouchersPage";
+import { VoucherDocPage } from "@/modules/treasury/pages/VoucherDocPage";
 import type { PageId } from "@/types/navigation";
 
 const VALID_PAGES: Set<string> = new Set([
@@ -51,6 +53,8 @@ const VALID_PAGES: Set<string> = new Set([
   "settings",
   "currencies",
   "system-states",
+  "vouchers",
+  "voucher-doc",
 ]);
 
 const getInitialPage = (): PageId => {
@@ -69,6 +73,8 @@ export const App: React.FC = () => {
   const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
+  const [selectedVoucherId, setSelectedVoucherId] = useState<number | null>(null);
+  const [voucherInitialType, setVoucherInitialType] = useState<"receipt" | "payment">("receipt");
 
   const setCurrentPage = (page: PageId) => {
     setCurrentPageState(page);
@@ -203,6 +209,27 @@ export const App: React.FC = () => {
         return <UsersRolesPage />;
       case "system-states":
         return <SystemStatesPage />;
+      case "vouchers":
+        return (
+          <VouchersPage
+            onOpenDoc={(id, type) => {
+              setSelectedVoucherId(id || null);
+              if (type) setVoucherInitialType(type);
+              setCurrentPage("voucher-doc");
+            }}
+          />
+        );
+      case "voucher-doc":
+        return (
+          <VoucherDocPage
+            voucherIdToView={selectedVoucherId}
+            initialType={voucherInitialType}
+            onBack={() => {
+              setSelectedVoucherId(null);
+              setCurrentPage("vouchers");
+            }}
+          />
+        );
       default:
         return <DashboardPage onNavigate={setCurrentPage} />;
     }

@@ -16,6 +16,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "المالية والجودة",
     items: [
+      { id: "vouchers", label: "سندات القبض والصرف", icon: "Receipt" },
       { id: "accounting", label: "الحسابات العامة", icon: "BookOpen" },
       { id: "currencies", label: "العملات وأسعار الصرف", icon: "Coins" },
       { id: "expiry", label: "الصلاحية والدفعات", icon: "CalendarClock" },
@@ -132,4 +133,13 @@ export const pageMeta: Record<PageId, PageMetaItem> = {
     title: "حالات النظام",
     subtitle: "تحميل، فراغ، خطأ، وبدون صلاحية",
   },
+  vouchers: {
+    title: "سندات القبض والصرف",
+    subtitle: "إدارة الخزينة، تحصيل العملاء، سداد الموردين، والمصروفات المباشرة",
+  },
+  "voucher-doc": {
+    title: "محرر السند المالي",
+    subtitle: "إنشاء وترحيل سند قبض أو صرف مع تخصيص الفواتير والطباعة",
+  },
 };
+

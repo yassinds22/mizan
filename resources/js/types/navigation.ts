@@ -22,7 +22,9 @@ export type PageId =
   | "users-roles"
   | "settings"
   | "currencies"
-  | "system-states";
+  | "system-states"
+  | "vouchers"
+  | "voucher-doc";
 
 export type Navigate = (page: PageId) => void;
 

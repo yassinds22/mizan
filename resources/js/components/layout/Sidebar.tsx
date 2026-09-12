@@ -54,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (currentPage === "item-detail" && id === "inventory") return true;
     if (currentPage === "invoice" && id === "sales") return true;
     if (currentPage === "purchase-doc" && id === "purchases") return true;
+    if (currentPage === "voucher-doc" && id === "vouchers") return true;
     if (
       ["journal-entry", "trial-balance", "profit-loss", "aging"].includes(currentPage) &&
       id === "accounting"
