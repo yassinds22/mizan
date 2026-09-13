@@ -162,5 +162,13 @@ Route::prefix('v1/inventory')->group(function () {
     Route::apiResource('stocktakes', \App\Http\Controllers\Api\V1\Inventory\PhysicalStocktakeController::class)
         ->parameters(['stocktakes' => 'physicalStocktake'])
         ->only(['index', 'store', 'show']);
+
+    // تقارير المخزون والرقابة وكارت الصنف التفصيلي (Inventory Reports & Analytics)
+    Route::prefix('reports')->group(function () {
+        Route::get('item-card/{item}', [\App\Http\Controllers\Api\V1\Inventory\InventoryReportController::class, 'itemCard']);
+        Route::get('valuation', [\App\Http\Controllers\Api\V1\Inventory\InventoryReportController::class, 'valuation']);
+        Route::get('reconciliation', [\App\Http\Controllers\Api\V1\Inventory\InventoryReportController::class, 'reconciliation']);
+        Route::get('analytics', [\App\Http\Controllers\Api\V1\Inventory\InventoryReportController::class, 'analytics']);
+    });
 });
 

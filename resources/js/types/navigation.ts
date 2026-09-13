@@ -14,6 +14,7 @@ export type PageId =
   | "warehouses"
   | "stock-move"
   | "stocktake"
+  | "inventory-valuation"
   | "fefo"
   | "waste-alerts"
   | "trial-balance"

@@ -6,6 +6,7 @@ import { ItemDetailPage } from "@/modules/inventory/pages/ItemDetailPage";
 import { WarehousesPage } from "@/modules/warehouses/pages/WarehousesPage";
 import { StockMovePage } from "@/modules/warehouses/pages/StockMovePage";
 import { PhysicalStocktakePage } from "@/modules/inventory/pages/PhysicalStocktakePage";
+import { InventoryValuationPage } from "@/modules/inventory/pages/InventoryValuationPage";
 import { SalesPage } from "@/modules/sales/pages/SalesPage";
 import { InvoicePage } from "@/modules/sales/pages/InvoicePage";
 import { PurchasesPage } from "@/modules/purchases/pages/PurchasesPage";
@@ -49,6 +50,7 @@ const VALID_PAGES: Set<string> = new Set([
   "warehouses",
   "stock-move",
   "stocktake",
+  "inventory-valuation",
   "fefo",
   "waste-alerts",
   "trial-balance",
@@ -84,6 +86,7 @@ export const App: React.FC = () => {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
   const [selectedVoucherId, setSelectedVoucherId] = useState<number | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [voucherInitialType, setVoucherInitialType] = useState<"receipt" | "payment">("receipt");
   const [statementPartyType, setStatementPartyType] = useState<"supplier" | "customer">("supplier");
   const [statementPartyId, setStatementPartyId] = useState<number | undefined>(undefined);
@@ -127,15 +130,31 @@ export const App: React.FC = () => {
       case "dashboard":
         return <DashboardPage onNavigate={setCurrentPage} />;
       case "inventory":
-        return <InventoryPage onOpenItem={() => setCurrentPage("item-detail")} />;
+        return (
+          <InventoryPage
+            onOpenItem={(id) => {
+              setSelectedItemId(id || null);
+              setCurrentPage("item-detail");
+            }}
+          />
+        );
       case "item-detail":
-        return <ItemDetailPage onBack={() => setCurrentPage("inventory")} />;
+        return <ItemDetailPage itemId={selectedItemId} onBack={() => setCurrentPage("inventory")} />;
       case "warehouses":
         return <WarehousesPage />;
       case "stock-move":
         return <StockMovePage />;
       case "stocktake":
         return <PhysicalStocktakePage />;
+      case "inventory-valuation":
+        return (
+          <InventoryValuationPage
+            onOpenItemCard={(id) => {
+              setSelectedItemId(id);
+              setCurrentPage("item-detail");
+            }}
+          />
+        );
       case "sales":
         return (
           <SalesPage

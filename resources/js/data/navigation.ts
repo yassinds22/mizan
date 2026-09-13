@@ -9,6 +9,7 @@ export const navGroups: NavGroup[] = [
       { id: "warehouses", label: "المستودعات", icon: "Warehouse" },
       { id: "stock-move", label: "حركة المخزون", icon: "ArrowLeftRight" },
       { id: "stocktake", label: "الجرد المخزني الفعلي", icon: "ClipboardCheck" },
+      { id: "inventory-valuation", label: "تقييم المخزون المالي", icon: "BarChart3" },
       { id: "purchases", label: "المشتريات والموردين", icon: "Truck" },
       { id: "sales", label: "المبيعات والعملاء", icon: "ShoppingCart" },
       { id: "partners", label: "العملاء والموردون", icon: "Users" },
@@ -98,6 +99,10 @@ export const pageMeta: Record<PageId, PageMetaItem> = {
   stocktake: {
     title: "الجرد المخزني الفعلي وتسوية الفروقات",
     subtitle: "جلسات الجرد الميداني، الفروقات الكمية والمالية، وترحيل قيود التسوية آلياً",
+  },
+  "inventory-valuation": {
+    title: "تقييم المخزون المالي والرقابة التحليلية",
+    subtitle: "تقييم رأس المال المخزني بالتكلفة وسعر البيع والمطابقة اللحظية مع الأستاذ العام",
   },
   fefo: {
     title: "إدارة FEFO",

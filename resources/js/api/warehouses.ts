@@ -49,6 +49,10 @@ export const warehousesApi = {
     return json.data;
   },
 
+  async getWarehouses(activeOnly = false): Promise<Warehouse[]> {
+    return this.list(activeOnly);
+  },
+
   async get(id: number): Promise<Warehouse> {
     const res = await fetch(`${API_BASE}/${id}`, {
       headers: { Accept: 'application/json' },
