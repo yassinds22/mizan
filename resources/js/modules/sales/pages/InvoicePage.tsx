@@ -66,13 +66,45 @@ interface InvoiceDraft {
 
 const DRAFT_STORAGE_KEY = "mizan_active_sales_invoice_draft";
 
+export const createEmptyLine = (): InvoiceLineState => ({
+  id: "line_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+  item_id: 0,
+  item_name_ar: "",
+  item_sku: "",
+  item_unit_id: null,
+  unit_name: "",
+  conversion_factor: 1,
+  quantity: 1,
+  unit_price: 0,
+  cost_price: 0,
+  discount_rate: 0,
+  tax_rate: 15,
+  available_units: [],
+});
+
 const getSavedDraft = (): InvoiceDraft | null => {
   try {
     const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0) {
-      return parsed;
+      // Deduplicate by item_id strictly
+      const seen = new Set<number>();
+      const deduped: InvoiceLineState[] = [];
+      for (const line of parsed.lines) {
+        if (line.item_id && line.item_id > 0) {
+          if (!seen.has(line.item_id)) {
+            seen.add(line.item_id);
+            deduped.push(line);
+          }
+        }
+      }
+      if (deduped.length > 0) {
+        return {
+          ...parsed,
+          lines: deduped,
+        };
+      }
     }
     return null;
   } catch (e) {
@@ -120,10 +152,15 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     initialDraft?.paymentMethod || "cash"
   );
   const [notes, setNotes] = useState(initialDraft?.notes || "");
-  const [lines, setLines] = useState<InvoiceLineState[]>(initialDraft?.lines || []);
-  const [isDraftRestored, setIsDraftRestored] = useState<boolean>(
-    Boolean(!invoiceIdToView && initialDraft?.lines && initialDraft.lines.length > 0)
-  );
+  const [lines, setLines] = useState<InvoiceLineState[]>(() => {
+    return [createEmptyLine()];
+  });
+  const [isDraftRestored, setIsDraftRestored] = useState<boolean>(false);
+
+  // Row Search & Auto-Navigation States
+  const [activeSearchLineId, setActiveSearchLineId] = useState<string | null>(null);
+  const [lineSearchText, setLineSearchText] = useState<Record<string, string>>({});
+  const [highlightedSuggestIdx, setHighlightedSuggestIdx] = useState<number>(0);
 
   // Barcode quick scan & Autocomplete
   const [scanInput, setScanInput] = useState("");
@@ -165,6 +202,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: "success" | "info" | "error" } | null>(null);
+  const [highlightedLineId, setHighlightedLineId] = useState<string | null>(null);
 
   // Center Screen Luxury Alert Modal State
   const [centerAlert, setCenterAlert] = useState<{
@@ -255,15 +293,31 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setShowSearchDropdown(false);
       }
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest(".item-suggestions-menu") && !target?.closest("input[id^='item-input-']")) {
+        setActiveSearchLineId(null);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Auto-Save Draft to LocalStorage whenever the user changes items or inputs
+  // Auto-focus the first row's item input on initial screen render
+  useEffect(() => {
+    if (!invoiceIdToView && lines.length > 0) {
+      const timer = setTimeout(() => {
+        const firstInput = document.getElementById(`item-input-${lines[0].id}`);
+        firstInput?.focus();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Auto-Save Draft to LocalStorage only if user has entered real items
   useEffect(() => {
     if (!invoiceIdToView && !currentSavedInvoice) {
-      if (lines.length > 0 || notes || selectedCustomerId !== "cash") {
+      const hasRealItems = lines.some((l) => l.item_id > 0);
+      if (hasRealItems) {
         const draft: InvoiceDraft = {
           branchId,
           selectedCustomerId,
@@ -365,11 +419,9 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           const inv = await salesApi.getInvoice(invoiceIdToView);
           populateInvoice(inv);
         } else {
-          // If no draft in localStorage and lines is empty, initialize with first item
-          const draft = getSavedDraft();
-          if ((!draft || !draft.lines || draft.lines.length === 0) && itemsRes.data?.length > 0 && lines.length === 0) {
-            const firstItem = itemsRes.data[0];
-            addNewLineWithItem(firstItem);
+          // Fresh invoice: start with ONE empty row ready for input
+          if (lines.length === 0) {
+            setLines([createEmptyLine()]);
           }
         }
       } catch (err: any) {
@@ -413,7 +465,18 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     }
   };
 
-  const addNewLineWithItem = (item: Item, targetUnit?: ItemUnit) => {
+  const addNewLineWithItem = (
+    item: Item,
+    targetUnit?: ItemUnit,
+    addedQuantity: number = 1
+  ) => {
+    // 1. Strict duplicate check across all invoice rows
+    const isDuplicate = lines.some((l) => l.item_id === item.id);
+    if (isDuplicate) {
+      showToast("هذا الصنف مضاف بالفعل إلى الفاتورة.", "error");
+      return;
+    }
+
     const baseUomName = item.base_uom?.name_ar || "حبة";
     const availableUnits = item.units || [];
     const chosenUnit = targetUnit || availableUnits.find((u) => u.is_base_unit) || availableUnits[0];
@@ -425,15 +488,51 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       item.cost_price * 1.25 ||
       10;
 
+    const chosenUnitId = chosenUnit?.id || null;
+
+    // 2. If there is already an empty row in the table, populate it instead of appending
+    const emptyRowIndex = lines.findIndex((l) => !l.item_id || l.item_id === 0);
+    if (emptyRowIndex !== -1) {
+      const targetId = lines[emptyRowIndex].id;
+      setLines((prev) =>
+        prev.map((l) =>
+          l.id === targetId
+            ? {
+                ...l,
+                item_id: item.id,
+                item_name_ar: item.name_ar,
+                item_sku: item.sku,
+                item_unit_id: chosenUnitId,
+                unit_name: uName,
+                conversion_factor: factor,
+                quantity: addedQuantity,
+                unit_price: retailPrice,
+                cost_price: item.cost_price || 0,
+                discount_rate: 0,
+                tax_rate: 15,
+                available_units: availableUnits,
+              }
+            : l
+        )
+      );
+      setHighlightedLineId(targetId);
+      setTimeout(() => setHighlightedLineId(null), 1400);
+      setTimeout(() => {
+        document.getElementById(`unit-input-${targetId}`)?.focus();
+      }, 50);
+      return;
+    }
+
+    // 3. Otherwise append a new row
     const newLine: InvoiceLineState = {
       id: String(Date.now() + Math.random()),
       item_id: item.id,
       item_name_ar: item.name_ar,
       item_sku: item.sku,
-      item_unit_id: chosenUnit?.id || null,
+      item_unit_id: chosenUnitId,
       unit_name: uName,
       conversion_factor: factor,
-      quantity: 1,
+      quantity: addedQuantity,
       unit_price: retailPrice,
       cost_price: item.cost_price || 0,
       discount_rate: 0,
@@ -442,11 +541,27 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     };
 
     setLines((prev) => [...prev, newLine]);
+    setHighlightedLineId(newLine.id);
+    setTimeout(() => setHighlightedLineId(null), 1400);
+    setTimeout(() => {
+      document.getElementById(`unit-input-${newLine.id}`)?.focus();
+    }, 50);
   };
 
-  const handleItemChange = (lineId: string, itemId: number) => {
-    const item = items.find((i) => i.id === itemId);
-    if (!item) return;
+  const selectItemForLine = (lineId: string, item: Item): boolean => {
+    // 1. Strict duplicate check across all lines in invoice except current line
+    const isDuplicate = lines.some((l) => l.id !== lineId && l.item_id === item.id);
+    if (isDuplicate) {
+      showToast("هذا الصنف مضاف بالفعل إلى الفاتورة.", "error");
+      setTimeout(() => {
+        const inputEl = document.getElementById(`item-input-${lineId}`) as HTMLInputElement | null;
+        if (inputEl) {
+          inputEl.focus();
+          inputEl.select();
+        }
+      }, 50);
+      return false;
+    }
 
     const baseUomName = item.base_uom?.name_ar || "حبة";
     const availableUnits = item.units || [];
@@ -467,6 +582,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
               item_unit_id: baseUnitObj?.id || null,
               unit_name: baseUnitObj?.uom?.name_ar || baseUomName,
               conversion_factor: baseUnitObj?.conversion_factor || 1.0,
+              quantity: l.quantity && Number(l.quantity) > 0 ? l.quantity : 1,
               unit_price: retailPrice,
               cost_price: item.cost_price || 0,
               available_units: availableUnits,
@@ -474,6 +590,26 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           : l
       )
     );
+
+    // Clear search text for this row & close dropdown
+    setLineSearchText((prev) => {
+      const copy = { ...prev };
+      delete copy[lineId];
+      return copy;
+    });
+    setActiveSearchLineId(null);
+
+    // Focus Sold Unit in the same line
+    setTimeout(() => {
+      const unitEl = document.getElementById(`unit-input-${lineId}`);
+      if (unitEl) {
+        unitEl.focus();
+      } else {
+        document.getElementById(`qty-input-${lineId}`)?.focus();
+      }
+    }, 60);
+
+    return true;
   };
 
   const handleUnitChange = (lineId: string, unitId: number) => {
@@ -500,6 +636,30 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     );
   };
 
+  const handleDiscountEnter = (lineId: string) => {
+    const currentLine = lines.find((l) => l.id === lineId);
+    if (!currentLine || !currentLine.item_id || currentLine.item_id === 0) {
+      return;
+    }
+
+    const currentIndex = lines.findIndex((l) => l.id === lineId);
+    if (currentIndex < lines.length - 1) {
+      // There is an existing row below, move focus to its item input
+      const nextLine = lines[currentIndex + 1];
+      setTimeout(() => {
+        document.getElementById(`item-input-${nextLine.id}`)?.focus();
+      }, 50);
+    } else {
+      // Current row is the last row: create a new empty row below
+      const newLine = createEmptyLine();
+      setLines((prev) => [...prev, newLine]);
+      setTimeout(() => {
+        const nextItemInput = document.getElementById(`item-input-${newLine.id}`);
+        nextItemInput?.focus();
+      }, 60);
+    }
+  };
+
   const updateQuantity = (lineId: string, delta: number) => {
     setLines((prev) =>
       prev.map((l) => {
@@ -513,7 +673,12 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
 
   const removeLine = (id: string) => {
     if (lines.length <= 1) {
-      showToast("يجب أن تحتوي الفاتورة على سطر واحد على الأقل", "info");
+      const freshLine = createEmptyLine();
+      setLines([freshLine]);
+      showToast("تم تفريغ السطر", "info");
+      setTimeout(() => {
+        document.getElementById(`item-input-${freshLine.id}`)?.focus();
+      }, 50);
       return;
     }
     setLines((prev) => prev.filter((l) => l.id !== id));
@@ -524,16 +689,17 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     try {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
     } catch (e) {}
-    setLines([]);
+    const freshLine = createEmptyLine();
+    setLines([freshLine]);
     setSelectedCustomerId("cash");
     setPaymentMethod("cash");
     setNotes("");
     setCashTendered("");
     setIsDraftRestored(false);
-    if (items.length > 0) {
-      addNewLineWithItem(items[0]);
-    }
     showToast("تم تفريغ الفاتورة وبدء مسودة فارغة", "info");
+    setTimeout(() => {
+      document.getElementById(`item-input-${freshLine.id}`)?.focus();
+    }, 100);
   };
 
   // Start New Invoice for Next Customer
@@ -543,19 +709,17 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     } catch (e) {}
     setCurrentSavedInvoice(null);
     setInvoiceNumber("");
-    setLines([]);
+    const freshLine = createEmptyLine();
+    setLines([freshLine]);
     setSelectedCustomerId("cash");
     setPaymentMethod("cash");
     setNotes("");
     setCashTendered("");
     setIsDraftRestored(false);
-    if (items.length > 0) {
-      addNewLineWithItem(items[0]);
-    }
     showToast("جاهز لإنشاء فاتورة جديدة للعميل التالي ✨", "info");
     setTimeout(() => {
-      barcodeInputRef.current?.focus();
-    }, 150);
+      document.getElementById(`item-input-${freshLine.id}`)?.focus();
+    }, 100);
   };
 
   // Barcode & Quick Search
@@ -641,10 +805,21 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     let subtotal = 0;
     let discountTotal = 0;
     let taxTotal = 0;
-    let totalItemsCount = lines.length;
+    let totalItemsCount = 0;
     let totalQuantity = 0;
 
     const lineCalculations = lines.map((l) => {
+      // If empty row (no item selected yet), calculation totals are 0
+      if (!l.item_id || l.item_id === 0) {
+        return {
+          ...l,
+          lineSubtotal: 0,
+          lineDiscount: 0,
+          lineTax: 0,
+          lineTotal: 0,
+        };
+      }
+
       const qtyNum = Number(l.quantity) || 0;
       const lineSubtotal = qtyNum * (Number(l.unit_price) || 0);
       const lineDiscount = lineSubtotal * ((Number(l.discount_rate) || 0) / 100);
@@ -655,7 +830,8 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
       subtotal += lineSubtotal;
       discountTotal += lineDiscount;
       taxTotal += lineTax;
-      totalQuantity += Number(l.quantity) || 0;
+      totalItemsCount += 1;
+      totalQuantity += qtyNum;
 
       return {
         ...l,
@@ -722,12 +898,13 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
 
   // Save Invoice (Draft or Posted)
   const handleSaveInvoice = async (postImmediately: boolean) => {
-    if (lines.length === 0) {
-      showCenterAlert("يرجى إضافة صنف واحد على الأقل في الفاتورة للمتابعة.", "warning", "الفاتورة فارغة");
+    const validLines = lines.filter((l) => l.item_id && l.item_id > 0);
+    if (validLines.length === 0) {
+      showCenterAlert("يرجى إضافة واختيار صنف غذائي واحد على الأقل للمتابعة.", "warning", "الفاتورة فارغة");
       return;
     }
 
-    const invalidQty = lines.find((l) => !l.quantity || Number(l.quantity) <= 0);
+    const invalidQty = validLines.find((l) => !l.quantity || Number(l.quantity) <= 0);
     if (invalidQty) {
       showCenterAlert(
         `الكمية المحددة للصنف [${invalidQty.item_name_ar || "صنف"}] غير صالحة. يجب أن تكون الكمية أكبر من الصفر.`,
@@ -739,7 +916,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
     }
 
     // Frontend Stock Availability Validation
-    for (const l of lines) {
+    for (const l of validLines) {
       const matchedItem = items.find((it) => it.id === l.item_id);
       if (matchedItem) {
         const availableStock = Number(matchedItem.stock_quantity ?? 0);
@@ -769,7 +946,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
         payment_method: paymentMethod,
         notes: notes || undefined,
         post_immediately: postImmediately,
-        lines: lines.map((l) => ({
+        lines: validLines.map((l) => ({
           item_id: l.item_id,
           item_unit_id: l.item_unit_id || undefined,
           unit_name: l.unit_name,
@@ -1631,7 +1808,16 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
             type="button"
             className="btn btn-primary"
             onClick={() => {
-              if (items.length > 0) addNewLineWithItem(items[0]);
+              const emptyLine = lines.find((l) => !l.item_id || l.item_id === 0);
+              if (emptyLine) {
+                document.getElementById(`item-input-${emptyLine.id}`)?.focus();
+              } else {
+                const newLine = createEmptyLine();
+                setLines((prev) => [...prev, newLine]);
+                setTimeout(() => {
+                  document.getElementById(`item-input-${newLine.id}`)?.focus();
+                }, 50);
+              }
             }}
             disabled={currentSavedInvoice?.status.value === "posted"}
             style={{
@@ -1656,11 +1842,19 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           background: "var(--surface, #ffffff)",
           borderRadius: "var(--radius, 14px)",
           border: "1px solid var(--line, #d5e0d8)",
-          overflow: "hidden",
           boxShadow: "0 2px 8px rgba(20, 35, 28, 0.03)",
+          overflow: "visible",
         }}
       >
-        <div style={{ overflowX: "auto" }}>
+        <div
+          style={{
+            minHeight: "340px",
+            maxHeight: "440px",
+            overflowY: "auto",
+            overflowX: "visible",
+            position: "relative",
+          }}
+        >
           <table
             className="data"
             style={{
@@ -1670,390 +1864,568 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
               fontSize: 13,
             }}
           >
-            <thead>
+            <thead
+              style={{
+                position: "sticky",
+                top: 0,
+                zIndex: 10,
+                background: "var(--surface-2, #f7faf6)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              }}
+            >
               <tr
                 style={{
-                  background: "var(--surface-2, #f7faf6)",
                   borderBottom: "2px solid var(--line, #d5e0d8)",
                   color: "var(--ink-soft, #4a5c52)",
                   fontWeight: 800,
                   fontSize: 12,
                 }}
               >
-                <th style={{ padding: "12px 14px", width: 44, textAlign: "center" }}>#</th>
-                <th style={{ padding: "12px 14px", minWidth: 260 }}>الصنف الغذائي</th>
-                <th style={{ padding: "12px 14px", width: 170 }}>الوحدة المباعة</th>
-                <th style={{ padding: "12px 14px", width: 140, textAlign: "center" }}>الكمية</th>
-                <th style={{ padding: "12px 14px", width: 130, textAlign: "center" }}>سعر الوحدة</th>
-                <th style={{ padding: "12px 14px", width: 100, textAlign: "center" }}>خصم %</th>
-                <th style={{ padding: "12px 14px", width: 120, textAlign: "center" }}>الضريبة 15%</th>
-                <th style={{ padding: "12px 14px", width: 130, textAlign: "left" }}>الإجمالي</th>
-                <th style={{ padding: "12px 14px", width: 48, textAlign: "center" }}></th>
+                <th style={{ padding: "8px 10px", width: 42, textAlign: "center" }}>#</th>
+                <th style={{ padding: "8px 10px", minWidth: 260 }}>الصنف الغذائي</th>
+                <th style={{ padding: "8px 10px", width: 160 }}>الوحدة المباعة</th>
+                <th style={{ padding: "8px 10px", width: 130, textAlign: "center" }}>الكمية</th>
+                <th style={{ padding: "8px 10px", width: 125, textAlign: "center" }}>السعر (قبل الضريبة)</th>
+                <th style={{ padding: "8px 10px", width: 85, textAlign: "center" }}>خصم %</th>
+                <th style={{ padding: "8px 10px", width: 105, textAlign: "center" }}>الضريبة 15%</th>
+                <th style={{ padding: "8px 10px", width: 135, textAlign: "left" }}>الإجمالي (بعد الضريبة)</th>
+                <th style={{ padding: "8px 10px", width: 44, textAlign: "center" }}></th>
               </tr>
             </thead>
             <tbody>
-              {calculations.lineCalculations.map((line, idx) => (
-                <tr
-                  key={line.id}
-                  style={{
-                    borderBottom: "1px solid var(--line, #d5e0d8)",
-                    background: idx % 2 === 0 ? "var(--surface, #ffffff)" : "var(--surface-2, #f7faf6)",
-                    transition: "background 0.15s ease",
-                  }}
-                >
-                  {/* Row Number */}
-                  <td style={{ padding: "10px 14px", textAlign: "center", color: "var(--muted, #7a8b82)", fontWeight: 700 }}>
-                    {idx + 1}
-                  </td>
+              {calculations.lineCalculations.map((line, idx) => {
+                const isHighlighted = line.id === highlightedLineId;
+                const queryText = (lineSearchText[line.id] !== undefined ? lineSearchText[line.id] : "").trim().toLowerCase();
+                const matchingSuggestions = items.filter((it) => {
+                  if (!queryText) return true;
+                  return (
+                    it.name_ar.toLowerCase().includes(queryText) ||
+                    it.sku.toLowerCase().includes(queryText) ||
+                    (it.barcode && it.barcode.toLowerCase().includes(queryText))
+                  );
+                }).slice(0, 8);
 
-                  {/* Food Item Selection */}
-                  <td style={{ padding: "10px 14px" }}>
-                    <select
-                      value={line.item_id}
-                      onChange={(e) => handleItemChange(line.id, Number(e.target.value))}
-                      disabled={currentSavedInvoice?.status.value === "posted"}
-                      style={{
-                        width: "100%",
-                        height: 38,
-                        padding: "0 10px",
-                        borderRadius: 8,
-                        border: "1px solid var(--line, #d5e0d8)",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: "var(--ink, #14231c)",
-                        background: "var(--surface, #ffffff)",
-                        outline: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>
-                          {it.name_ar} ({it.sku})
-                        </option>
-                      ))}
-                    </select>
-                    {(() => {
-                      const matchedItem = items.find((it) => it.id === line.item_id);
-                      const availableStock = matchedItem ? Number(matchedItem.stock_quantity ?? 0) : 0;
-                      const baseQty = Number(line.quantity || 0) * Number(line.conversion_factor || 1);
-                      const isOverStock = baseQty > availableStock;
+                return (
+                  <tr
+                    key={line.id}
+                    style={{
+                      borderBottom: "1px solid var(--line, #d5e0d8)",
+                      background: isHighlighted
+                        ? "rgba(34, 197, 94, 0.16)"
+                        : idx % 2 === 0
+                        ? "var(--surface, #ffffff)"
+                        : "var(--surface-2, #f7faf6)",
+                      transition: "background 0.2s ease, box-shadow 0.2s ease",
+                      boxShadow: isHighlighted ? "inset 0 0 0 2px var(--brand, #1a5c45)" : "none",
+                    }}
+                  >
+                    {/* Row Number */}
+                    <td style={{ padding: "6px 10px", textAlign: "center", color: "var(--muted, #7a8b82)", fontWeight: 700 }}>
+                      {idx + 1}
+                    </td>
 
-                      return (
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
-                          <span
+                    {/* Food Item Search & Combobox */}
+                    <td style={{ padding: "6px 10px", position: "relative" }}>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          id={`item-input-${line.id}`}
+                          type="text"
+                          autoComplete="off"
+                          value={
+                            lineSearchText[line.id] !== undefined
+                              ? lineSearchText[line.id]
+                              : line.item_id > 0
+                              ? `${line.item_name_ar}${line.item_sku ? ` (${line.item_sku})` : ""}`
+                              : ""
+                          }
+                          placeholder="ابحث بالاسم، SKU، أو الباركود..."
+                          disabled={currentSavedInvoice?.status.value === "posted"}
+                          onFocus={(e) => {
+                            setActiveSearchLineId(line.id);
+                            setHighlightedSuggestIdx(0);
+                            e.target.select();
+                          }}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setLineSearchText((prev) => ({ ...prev, [line.id]: val }));
+                            setActiveSearchLineId(line.id);
+                            setHighlightedSuggestIdx(0);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              if (matchingSuggestions.length > 0) {
+                                setHighlightedSuggestIdx((prev) => (prev + 1) % matchingSuggestions.length);
+                              }
+                            } else if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              if (matchingSuggestions.length > 0) {
+                                setHighlightedSuggestIdx((prev) => (prev - 1 + matchingSuggestions.length) % matchingSuggestions.length);
+                              }
+                            } else if (e.key === "Enter") {
+                              e.preventDefault();
+                              let candidate: Item | undefined;
+
+                              if (activeSearchLineId === line.id && matchingSuggestions.length > 0 && matchingSuggestions[highlightedSuggestIdx]) {
+                                candidate = matchingSuggestions[highlightedSuggestIdx];
+                              } else if (queryText) {
+                                candidate =
+                                  items.find((it) => it.barcode && it.barcode.toLowerCase() === queryText) ||
+                                  items.find((it) => it.sku.toLowerCase() === queryText) ||
+                                  items.find((it) => it.name_ar.toLowerCase().includes(queryText)) ||
+                                  matchingSuggestions[0];
+                              }
+
+                              if (candidate) {
+                                selectItemForLine(line.id, candidate);
+                              } else if (line.item_id > 0) {
+                                // Already has valid item, move forward to Sold Unit
+                                setActiveSearchLineId(null);
+                                document.getElementById(`unit-input-${line.id}`)?.focus();
+                              } else {
+                                showToast("لم يتم العثور على صنف مطابق لهذا البحث", "error");
+                              }
+                            } else if (e.key === "Escape") {
+                              setActiveSearchLineId(null);
+                            }
+                          }}
+                          style={{
+                            width: "100%",
+                            height: 32,
+                            padding: "0 10px",
+                            borderRadius: 6,
+                            border: line.item_id > 0 ? "1px solid var(--line, #d5e0d8)" : "1.5px solid var(--brand, #1a5c45)",
+                            fontSize: 12.5,
+                            fontWeight: line.item_id > 0 ? 700 : 500,
+                            color: "var(--ink, #14231c)",
+                            background: line.item_id > 0 ? "var(--surface, #ffffff)" : "rgba(26, 92, 69, 0.03)",
+                            outline: "none",
+                            boxShadow: activeSearchLineId === line.id ? "0 0 0 2px rgba(26, 92, 69, 0.2)" : "none",
+                          }}
+                        />
+
+                        {/* Autocomplete Suggestions Menu */}
+                        {activeSearchLineId === line.id && currentSavedInvoice?.status.value !== "posted" && (
+                          <div
+                            className="item-suggestions-menu"
                             style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              color: isOverStock ? "var(--danger, #dc2626)" : availableStock > 0 ? "var(--brand, #166534)" : "var(--muted, #64748b)",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 4,
+                              position: "absolute",
+                              top: "100%",
+                              right: 0,
+                              left: 0,
+                              zIndex: 9999,
+                              background: "var(--surface, #ffffff)",
+                              borderRadius: 8,
+                              border: "1px solid var(--line, #d5e0d8)",
+                              boxShadow: "0 12px 28px rgba(0, 0, 0, 0.16)",
+                              maxHeight: 250,
+                              overflowY: "auto",
+                              marginTop: 4,
                             }}
                           >
-                            <Boxes size={12} />
-                            المخزون المتوفر: <strong>{availableStock.toLocaleString()}</strong>
-                          </span>
-                          {isOverStock && (
+                            {matchingSuggestions.length === 0 ? (
+                              <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--muted, #64748b)", textAlign: "center" }}>
+                                لا يوجد صنف مطابق للبحث
+                              </div>
+                            ) : (
+                              matchingSuggestions.map((it, sIdx) => {
+                                const isFocused = sIdx === highlightedSuggestIdx;
+                                const isAlreadyInInvoice = lines.some((l) => l.id !== line.id && l.item_id === it.id);
+                                const stockQty = Number(it.stock_quantity ?? 0);
+
+                                return (
+                                  <div
+                                    key={it.id}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      selectItemForLine(line.id, it);
+                                    }}
+                                    onMouseEnter={() => setHighlightedSuggestIdx(sIdx)}
+                                    style={{
+                                      padding: "8px 12px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "space-between",
+                                      cursor: "pointer",
+                                      background: isFocused ? "rgba(26, 92, 69, 0.08)" : "transparent",
+                                      borderBottom: "1px solid var(--line-light, #f1f5f9)",
+                                      transition: "background 0.1s ease",
+                                    }}
+                                  >
+                                    <div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                        <span style={{ fontWeight: 800, fontSize: 12.5, color: "var(--ink, #0f172a)" }}>
+                                          {it.name_ar}
+                                        </span>
+                                        <span style={{ fontSize: 10.5, color: "var(--muted, #64748b)", background: "var(--surface-2, #f1f5f9)", padding: "1px 5px", borderRadius: 4, fontFamily: "monospace" }}>
+                                          {it.sku}
+                                        </span>
+                                        {isAlreadyInInvoice && (
+                                          <span style={{ fontSize: 9.5, color: "#dc2626", background: "#fef2f2", padding: "1px 5px", borderRadius: 4, fontWeight: 700 }}>
+                                            مضاف بالفعل
+                                          </span>
+                                        )}
+                                      </div>
+                                      {it.barcode && (
+                                        <div style={{ fontSize: 10, color: "var(--muted, #94a3b8)", marginTop: 2 }}>
+                                          باركود: {it.barcode}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div style={{ textAlign: "left" }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: stockQty > 0 ? "var(--brand, #166534)" : "var(--danger, #dc2626)" }}>
+                                        المخزون: {stockQty.toLocaleString()}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Stock & Alert Info for selected item */}
+                      {line.item_id > 0 && (() => {
+                        const matchedItem = items.find((it) => it.id === line.item_id);
+                        const availableStock = matchedItem ? Number(matchedItem.stock_quantity ?? 0) : 0;
+                        const baseQty = Number(line.quantity || 0) * Number(line.conversion_factor || 1);
+                        const isOverStock = baseQty > availableStock;
+
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
                             <span
                               style={{
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 fontWeight: 800,
-                                color: "#b91c1c",
-                                background: "#fee2e2",
-                                padding: "1px 6px",
-                                borderRadius: 4,
+                                color: isOverStock ? "var(--danger, #dc2626)" : availableStock > 0 ? "var(--brand, #166534)" : "var(--muted, #64748b)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
                               }}
                             >
-                              ⚠️ يتجاوز الرصيد!
+                              <Boxes size={11} />
+                              المخزون: <strong>{availableStock.toLocaleString()}</strong>
                             </span>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
+                            {isOverStock && (
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 800,
+                                  color: "#b91c1c",
+                                  background: "#fee2e2",
+                                  padding: "0 4px",
+                                  borderRadius: 3,
+                                }}
+                              >
+                                ⚠️ يتجاوز الرصيد!
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
 
-                  {/* Unit Selection */}
-                  <td style={{ padding: "10px 14px" }}>
-                    {line.available_units.length > 1 ? (
+                    {/* Unit Selection */}
+                    <td style={{ padding: "6px 10px" }}>
                       <select
+                        id={`unit-input-${line.id}`}
                         value={line.item_unit_id || ""}
                         onChange={(e) => handleUnitChange(line.id, Number(e.target.value))}
-                        disabled={currentSavedInvoice?.status.value === "posted"}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            document.getElementById(`qty-input-${line.id}`)?.focus();
+                          }
+                        }}
+                        disabled={currentSavedInvoice?.status.value === "posted" || !line.item_id || line.item_id === 0}
                         style={{
                           width: "100%",
-                          height: 38,
-                          padding: "0 10px",
-                          borderRadius: 8,
+                          height: 32,
+                          padding: "0 8px",
+                          borderRadius: 6,
                           border: "1px solid var(--line, #d5e0d8)",
                           fontSize: 12,
                           fontWeight: 600,
-                          background: "var(--surface, #ffffff)",
+                          background: !line.item_id || line.item_id === 0 ? "var(--surface-2, #f7faf6)" : "var(--surface, #ffffff)",
                           outline: "none",
-                          cursor: "pointer",
+                          cursor: !line.item_id || line.item_id === 0 ? "default" : "pointer",
                         }}
                       >
-                        {line.available_units.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.uom?.name_ar || "وحدة"} (معامل: {u.conversion_factor})
-                          </option>
-                        ))}
+                        {!line.item_id || line.item_id === 0 ? (
+                          <option value="">-</option>
+                        ) : line.available_units.length > 0 ? (
+                          line.available_units.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.uom?.name_ar || "وحدة"} (معامل: {u.conversion_factor})
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">{line.unit_name || "حبة"}</option>
+                        )}
                       </select>
-                    ) : (
-                      <div
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 12px",
-                          borderRadius: 6,
-                          background: "var(--surface-2, #f7faf6)",
-                          fontWeight: 700,
-                          fontSize: 12,
-                          color: "var(--ink-soft, #4a5c52)",
-                          border: "1px solid var(--line, #d5e0d8)",
-                        }}
-                      >
-                        <Tag size={12} style={{ color: "var(--brand, #1a5c45)" }} /> {line.unit_name}
-                      </div>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Quantity Stepper */}
-                  <td style={{ padding: "10px 14px" }}>
-                    {(() => {
-                      const matchedItem = items.find((it) => it.id === line.item_id);
-                      const availableStock = matchedItem ? Number(matchedItem.stock_quantity ?? 0) : 0;
-                      const baseQty = Number(line.quantity || 0) * Number(line.conversion_factor || 1);
-                      const isOverStock = baseQty > availableStock;
+                    {/* Quantity Stepper */}
+                    <td style={{ padding: "6px 10px" }}>
+                      {(() => {
+                        const matchedItem = items.find((it) => it.id === line.item_id);
+                        const availableStock = matchedItem ? Number(matchedItem.stock_quantity ?? 0) : 0;
+                        const baseQty = Number(line.quantity || 0) * Number(line.conversion_factor || 1);
+                        const isOverStock = line.item_id > 0 && baseQty > availableStock;
 
-                      return (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            border: isOverStock ? "2px solid #ef4444" : "1px solid var(--line, #d5e0d8)",
-                            borderRadius: 8,
-                            overflow: "hidden",
-                            background: isOverStock ? "#fef2f2" : "var(--surface, #ffffff)",
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          {currentSavedInvoice?.status.value !== "posted" && (
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(line.id, -1)}
-                              style={{
-                                width: 30,
-                                height: 36,
-                                border: "none",
-                                background: "var(--surface-2, #f7faf6)",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                color: "var(--ink-soft, #4a5c52)",
-                              }}
-                            >
-                              <Minus size={13} />
-                            </button>
-                          )}
-
-                          <input
-                            type="number"
-                            min={1}
-                            step="any"
-                            value={line.quantity === 0 ? "" : line.quantity}
-                            placeholder="1"
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              if (raw === "") {
-                                setLines((prev) =>
-                                  prev.map((l) => (l.id === line.id ? { ...l, quantity: "" } : l))
-                                );
-                                return;
-                              }
-                              const val = parseFloat(raw);
-                              setLines((prev) =>
-                                prev.map((l) =>
-                                  l.id === line.id
-                                    ? { ...l, quantity: isNaN(val) ? "" : val }
-                                    : l
-                                )
-                              );
-                            }}
-                            onBlur={() => {
-                              setLines((prev) =>
-                                prev.map((l) => {
-                                  if (l.id !== line.id) return l;
-                                  const num = Number(l.quantity);
-                                  return {
-                                    ...l,
-                                    quantity: !l.quantity || isNaN(num) || num <= 0 ? 1 : num,
-                                  };
-                                })
-                              );
-                            }}
-                            disabled={currentSavedInvoice?.status.value === "posted"}
+                        return (
+                          <div
                             style={{
-                              width: "100%",
-                              height: 36,
-                              border: "none",
-                              textAlign: "center",
-                              fontSize: 13,
-                              fontWeight: 800,
-                              padding: "0 4px",
-                              outline: "none",
-                              color: isOverStock ? "#b91c1c" : "inherit",
-                              background: "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              border: isOverStock ? "2px solid #ef4444" : "1px solid var(--line, #d5e0d8)",
+                              borderRadius: 6,
+                              overflow: "hidden",
+                              background: isOverStock ? "#fef2f2" : !line.item_id || line.item_id === 0 ? "var(--surface-2, #f7faf6)" : "var(--surface, #ffffff)",
+                              transition: "all 0.15s ease",
                             }}
-                          />
+                          >
+                            {currentSavedInvoice?.status.value !== "posted" && line.item_id > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => updateQuantity(line.id, -1)}
+                                style={{
+                                  width: 26,
+                                  height: 30,
+                                  border: "none",
+                                  background: "var(--surface-2, #f7faf6)",
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "var(--ink-soft, #4a5c52)",
+                                }}
+                              >
+                                <Minus size={12} />
+                              </button>
+                            )}
 
-                          {currentSavedInvoice?.status.value !== "posted" && (
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(line.id, 1)}
-                              style={{
-                                width: 30,
-                                height: 36,
-                                border: "none",
-                                background: "var(--surface-2, #f7faf6)",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                color: "var(--ink-soft, #4a5c52)",
+                            <input
+                              id={`qty-input-${line.id}`}
+                              type="number"
+                              min={1}
+                              step="any"
+                              value={line.item_id === 0 ? "" : (line.quantity === 0 ? "" : line.quantity)}
+                              placeholder="1"
+                              disabled={currentSavedInvoice?.status.value === "posted" || !line.item_id || line.item_id === 0}
+                              onFocus={(e) => e.target.select()}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  document.getElementById(`disc-input-${line.id}`)?.focus();
+                                }
                               }}
-                            >
-                              <Plus size={13} />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                if (raw === "") {
+                                  setLines((prev) =>
+                                    prev.map((l) => (l.id === line.id ? { ...l, quantity: "" } : l))
+                                  );
+                                  return;
+                                }
+                                const val = parseFloat(raw);
+                                setLines((prev) =>
+                                  prev.map((l) =>
+                                    l.id === line.id
+                                      ? { ...l, quantity: isNaN(val) ? "" : val }
+                                      : l
+                                  )
+                                );
+                              }}
+                              onBlur={() => {
+                                setLines((prev) =>
+                                  prev.map((l) => {
+                                    if (l.id !== line.id) return l;
+                                    const num = Number(l.quantity);
+                                    return {
+                                      ...l,
+                                      quantity: !l.quantity || isNaN(num) || num <= 0 ? 1 : num,
+                                    };
+                                  })
+                                );
+                              }}
+                              style={{
+                                width: "100%",
+                                height: 30,
+                                border: "none",
+                                textAlign: "center",
+                                fontSize: 13,
+                                fontWeight: 800,
+                                padding: "0 2px",
+                                outline: "none",
+                                color: isOverStock ? "#b91c1c" : "inherit",
+                                background: "transparent",
+                              }}
+                            />
 
-                  {/* Unit Price */}
-                  <td style={{ padding: "10px 14px" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={line.unit_price}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => {
-                        const val = Math.max(0, Number(e.target.value) || 0);
-                        setLines((prev) =>
-                          prev.map((l) => (l.id === line.id ? { ...l, unit_price: val } : l))
+                            {currentSavedInvoice?.status.value !== "posted" && line.item_id > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => updateQuantity(line.id, 1)}
+                                style={{
+                                  width: 26,
+                                  height: 30,
+                                  border: "none",
+                                  background: "var(--surface-2, #f7faf6)",
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "var(--ink-soft, #4a5c52)",
+                                }}
+                              >
+                                <Plus size={12} />
+                              </button>
+                            )}
+                          </div>
                         );
-                      }}
-                      disabled={currentSavedInvoice?.status.value === "posted"}
-                      style={{
-                        width: "100%",
-                        height: 38,
-                        borderRadius: 8,
-                        border: "1px solid var(--line, #d5e0d8)",
-                        textAlign: "center",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        fontFamily: "monospace",
-                        outline: "none",
-                      }}
-                    />
-                  </td>
+                      })()}
+                    </td>
 
-                  {/* Discount Rate */}
-                  <td style={{ padding: "10px 14px" }}>
-                    <div style={{ position: "relative" }}>
+                    {/* Unit Price */}
+                    <td style={{ padding: "6px 10px" }}>
                       <input
+                        id={`price-input-${line.id}`}
                         type="number"
                         min={0}
-                        max={100}
-                        step="1"
-                        value={line.discount_rate}
+                        step="0.01"
+                        value={line.item_id === 0 ? "" : line.unit_price}
+                        disabled={currentSavedInvoice?.status.value === "posted" || !line.item_id || line.item_id === 0}
                         onFocus={(e) => e.target.select()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            document.getElementById(`disc-input-${line.id}`)?.focus();
+                          }
+                        }}
                         onChange={(e) => {
-                          const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                          const val = Math.max(0, Number(e.target.value) || 0);
                           setLines((prev) =>
-                            prev.map((l) => (l.id === line.id ? { ...l, discount_rate: val } : l))
+                            prev.map((l) => (l.id === line.id ? { ...l, unit_price: val } : l))
                           );
                         }}
-                        disabled={currentSavedInvoice?.status.value === "posted"}
                         style={{
                           width: "100%",
-                          height: 38,
-                          borderRadius: 8,
+                          height: 30,
+                          borderRadius: 6,
                           border: "1px solid var(--line, #d5e0d8)",
                           textAlign: "center",
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: 700,
-                          paddingLeft: 18,
+                          fontFamily: "monospace",
                           outline: "none",
+                          background: !line.item_id || line.item_id === 0 ? "var(--surface-2, #f7faf6)" : "var(--surface, #ffffff)",
                         }}
                       />
+                    </td>
+
+                    {/* Discount Rate */}
+                    <td style={{ padding: "6px 10px" }}>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          id={`disc-input-${line.id}`}
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="1"
+                          value={line.item_id === 0 ? "" : line.discount_rate}
+                          disabled={currentSavedInvoice?.status.value === "posted" || !line.item_id || line.item_id === 0}
+                          onFocus={(e) => e.target.select()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleDiscountEnter(line.id);
+                            }
+                          }}
+                          onChange={(e) => {
+                            const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                            setLines((prev) =>
+                              prev.map((l) => (l.id === line.id ? { ...l, discount_rate: val } : l))
+                            );
+                          }}
+                          style={{
+                            width: "100%",
+                            height: 30,
+                            borderRadius: 6,
+                            border: "1px solid var(--line, #d5e0d8)",
+                            textAlign: "center",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            paddingLeft: 14,
+                            outline: "none",
+                            background: !line.item_id || line.item_id === 0 ? "var(--surface-2, #f7faf6)" : "var(--surface, #ffffff)",
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute",
+                            left: 4,
+                            top: 6,
+                            fontSize: 10,
+                            color: "var(--muted, #7a8b82)",
+                            fontWeight: 700,
+                          }}
+                        >
+                          %
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Tax */}
+                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                      <span style={{ fontWeight: 700, fontSize: 12, color: "var(--info, #2a6a8a)", fontFamily: "monospace" }}>
+                        {money(line.lineTax)}
+                      </span>
+                    </td>
+
+                    {/* Line Total */}
+                    <td style={{ padding: "6px 10px", textAlign: "left" }}>
                       <span
                         style={{
-                          position: "absolute",
-                          left: 6,
-                          top: 10,
-                          fontSize: 11,
-                          color: "var(--muted, #7a8b82)",
-                          fontWeight: 700,
+                          fontWeight: 900,
+                          fontSize: 13,
+                          color: "var(--ink, #14231c)",
+                          fontFamily: "monospace",
                         }}
                       >
-                        %
+                        {money(line.lineTotal)}
                       </span>
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Tax */}
-                  <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                    <span style={{ fontWeight: 700, color: "var(--info, #2a6a8a)", fontFamily: "monospace" }}>
-                      {money(line.lineTax)}
-                    </span>
-                  </td>
-
-                  {/* Line Total */}
-                  <td style={{ padding: "10px 14px", textAlign: "left" }}>
-                    <span
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 14,
-                        color: "var(--ink, #14231c)",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {money(line.lineTotal)}
-                    </span>
-                  </td>
-
-                  {/* Delete Button */}
-                  <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                    {currentSavedInvoice?.status.value !== "posted" && (
-                      <button
-                        type="button"
-                        onClick={() => removeLine(line.id)}
-                        title="حذف هذا السطر"
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          border: "none",
-                          background: "var(--danger-soft, #fdeeee)",
-                          color: "var(--danger, #b93a3a)",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          transition: "transform 0.15s ease",
-                        }}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    {/* Delete Button */}
+                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                      {currentSavedInvoice?.status.value !== "posted" && (
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.id)}
+                          title="حذف هذا السطر"
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 6,
+                            border: "none",
+                            background: "var(--danger-soft, #fdeeee)",
+                            color: "var(--danger, #b93a3a)",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "transform 0.15s ease",
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2072,16 +2444,29 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
             fontWeight: 700,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <span>عدد الأصناف: <strong>{calculations.totalItemsCount}</strong></span>
             <span>إجمالي الكمية: <strong>{calculations.totalQuantity}</strong> قطعة / وحدة</span>
+            <span style={{ color: "var(--line, #d5e0d8)" }}>|</span>
+            <span>قبل الضريبة: <strong style={{ fontFamily: "monospace" }}>{money(calculations.subtotal - calculations.discountTotal)}</strong></span>
+            <span>الضريبة: <strong style={{ fontFamily: "monospace", color: "var(--info, #2a6a8a)" }}>{money(calculations.taxTotal)}</strong></span>
+            <span>بعد الضريبة: <strong style={{ fontFamily: "monospace", color: "var(--brand, #1a5c45)" }}>{money(calculations.netTotal)}</strong></span>
           </div>
 
           {currentSavedInvoice?.status.value !== "posted" && (
             <button
               type="button"
               onClick={() => {
-                if (items.length > 0) addNewLineWithItem(items[0]);
+                const emptyLine = lines.find((l) => !l.item_id || l.item_id === 0);
+                if (emptyLine) {
+                  document.getElementById(`item-input-${emptyLine.id}`)?.focus();
+                } else {
+                  const newLine = createEmptyLine();
+                  setLines((prev) => [...prev, newLine]);
+                  setTimeout(() => {
+                    document.getElementById(`item-input-${newLine.id}`)?.focus();
+                  }, 50);
+                }
               }}
               style={{
                 background: "none",
@@ -2095,7 +2480,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
                 gap: 4,
               }}
             >
-              <Plus size={14} /> إضافة صنف إضافي
+              <Plus size={14} /> إضافة سطر جديد
             </button>
           )}
         </div>
@@ -2302,7 +2687,7 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           >
             <div>
               <div style={{ fontSize: 15, fontWeight: 900, color: "var(--brand-deep, #0f3d2e)" }}>
-                الإجمالي المستحق
+                الإجمالي المستحق (بعد الضريبة)
               </div>
               <div style={{ fontSize: 11, color: "var(--brand, #1a5c45)", fontWeight: 700 }}>
                 شامل ضريبة القيمة المضافة
@@ -2468,16 +2853,165 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
         </div>
       </div>
 
+      {/* Sticky Bottom Quick Action Strip for Ergonomic Cashier Flow */}
+      <div
+        style={{
+          position: "sticky",
+          bottom: 0,
+          zIndex: 40,
+          background: "rgba(255, 255, 255, 0.96)",
+          backdropFilter: "blur(12px)",
+          borderTop: "2px solid var(--brand, #1a5c45)",
+          borderRadius: "14px 14px 0 0",
+          boxShadow: "0 -6px 24px rgba(20, 35, 28, 0.12)",
+          padding: "10px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+          marginTop: 18,
+        }}
+      >
+        {/* Left: Quick Counts & Breakdown */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-soft, #4a5c52)" }}>
+            <span>عدد الأصناف:</span>
+            <span style={{ fontWeight: 800, color: "var(--ink, #14231c)", background: "var(--surface-2, #f7faf6)", padding: "2px 8px", borderRadius: 6, border: "1px solid var(--line, #d5e0d8)" }}>
+              {calculations.totalItemsCount}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-soft, #4a5c52)" }}>
+            <span>إجمالي القطع:</span>
+            <span style={{ fontWeight: 800, color: "var(--ink, #14231c)", background: "var(--surface-2, #f7faf6)", padding: "2px 8px", borderRadius: 6, border: "1px solid var(--line, #d5e0d8)" }}>
+              {calculations.totalQuantity}
+            </span>
+          </div>
+
+          {/* Price Before Tax */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-soft, #4a5c52)", background: "var(--surface-2, #f7faf6)", padding: "3px 10px", borderRadius: 6, border: "1px solid var(--line, #d5e0d8)" }}>
+            <span>قبل الضريبة:</span>
+            <strong style={{ fontFamily: "monospace", color: "var(--ink, #14231c)", fontSize: 14 }}>
+              {money(calculations.subtotal - calculations.discountTotal)}
+            </strong>
+          </div>
+
+          {/* VAT 15% */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--info, #2a6a8a)", background: "rgba(42, 106, 138, 0.08)", padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(42, 106, 138, 0.2)" }}>
+            <span>الضريبة (15%):</span>
+            <strong style={{ fontFamily: "monospace", fontSize: 14 }}>
+              + {money(calculations.taxTotal)}
+            </strong>
+          </div>
+
+          {/* Price After Tax */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 14px", background: "var(--brand-soft, #dceee6)", borderRadius: 8, border: "1px solid rgba(26, 92, 69, 0.25)" }}>
+            <span style={{ fontSize: 13, fontWeight: 900, color: "var(--brand-deep, #0f3d2e)" }}>
+              بعد الضريبة:
+            </span>
+            <span style={{ fontSize: 19, fontWeight: 900, color: "var(--brand-deep, #0f3d2e)", fontFamily: "monospace" }}>
+              {money(calculations.netTotal)}
+            </span>
+          </div>
+        </div>
+
+        {/* Right: Primary Action & Quick Shortcuts */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {currentSavedInvoice?.status.value === "posted" ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={handleStartNewInvoice}
+              style={{
+                height: 40,
+                padding: "0 18px",
+                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                color: "#ffffff",
+                fontSize: 13,
+                fontWeight: 800,
+                borderRadius: 8,
+                border: "none",
+                boxShadow: "0 4px 12px rgba(5, 150, 105, 0.3)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              <Plus size={15} strokeWidth={3} />
+              <span>فاتورة جديدة للعميل التالي (F4)</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => handleSaveInvoice(true)}
+              disabled={submitting}
+              style={{
+                height: 40,
+                padding: "0 22px",
+                background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+                fontSize: 13,
+                fontWeight: 800,
+                boxShadow: "0 4px 14px rgba(26, 92, 69, 0.25)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Send size={15} />
+              {submitting ? "جارِ الحفظ والترحيل..." : `حفظ وترحيل فوري (F9)`}
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setShowPrint(true)}
+            style={{
+              height: 40,
+              padding: "0 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              background: "var(--surface-2, #f7faf6)",
+              border: "1px solid var(--line, #d5e0d8)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Printer size={15} />
+            <span>طباعة (Ctrl+P)</span>
+          </button>
+        </div>
+      </div>
+
       {/* 6. Product Picker Modal (Ergonomic Catalog Drawer) */}
       <Modal
         isOpen={showProductPicker}
         onClose={() => setShowProductPicker(false)}
-        title="استعراض كتالوج الأصناف الغذائية"
-        subtitle="اختر أي صنف لإضافته مباشرة إلى الفاتورة بالوحدة المحددة"
+        title="استعراض واختيار الأصناف الغذائية"
+        subtitle="يمكنك إضافة عدة أصناف متتالية بضغطة زر واحدة دون إغلاق النافذة"
         footer={
-          <button className="btn btn-ghost" onClick={() => setShowProductPicker(false)}>
-            إغلاق
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <div style={{ fontSize: 13, color: "var(--ink-soft, #4a5c52)", fontWeight: 700 }}>
+              الأصناف بالفاتورة: <strong style={{ color: "var(--brand, #1a5c45)" }}>{calculations.totalItemsCount}</strong> صنف (إجمالي: <strong style={{ color: "var(--brand-deep, #0f3d2e)" }}>{money(calculations.netTotal)}</strong>)
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowProductPicker(false)}
+              style={{
+                height: 38,
+                padding: "0 20px",
+                fontSize: 13,
+                fontWeight: 800,
+                background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+              }}
+            >
+              تم / العودة للفاتورة
+            </button>
+          </div>
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2503,90 +3037,119 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
           </div>
 
           {/* List of items */}
-          <div style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-            {filteredPickerItems.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  addNewLineWithItem(item);
-                  setShowProductPicker(false);
-                  showToast(`تمت إضافة: ${item.name_ar}`);
-                }}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "12px 16px",
-                  borderRadius: "var(--radius-sm, 10px)",
-                  border: "1px solid var(--line, #d5e0d8)",
-                  background: "var(--surface, #ffffff)",
-                  cursor: "pointer",
-                  transition: "all 0.18s ease",
-                  gap: 14,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--surface-2, #f7faf6)";
-                  e.currentTarget.style.borderColor = "var(--brand, #1a5c45)";
-                  e.currentTarget.style.boxShadow = "0 3px 10px rgba(26, 92, 69, 0.08)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--surface, #ffffff)";
-                  e.currentTarget.style.borderColor = "var(--line, #d5e0d8)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                {/* Item Details */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: "var(--ink, #14231c)", marginBottom: 4 }}>
-                    {item.name_ar}
+          <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+            {filteredPickerItems.map((item) => {
+              const qtyInInvoice = lines
+                .filter((l) => l.item_id === item.id)
+                .reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
+
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-sm, 10px)",
+                    border: qtyInInvoice > 0 ? "1.5px solid var(--brand, #1a5c45)" : "1px solid var(--line, #d5e0d8)",
+                    background: qtyInInvoice > 0 ? "var(--surface-2, #f7faf6)" : "var(--surface, #ffffff)",
+                    transition: "all 0.18s ease",
+                    gap: 12,
+                  }}
+                >
+                  {/* Item Details */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13.5, color: "var(--ink, #14231c)" }}>
+                        {item.name_ar}
+                      </span>
+                      {qtyInInvoice > 0 && (
+                        <span
+                          style={{
+                            background: "var(--brand-soft, #dceee6)",
+                            color: "var(--brand-deep, #0f3d2e)",
+                            padding: "1px 7px",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 3,
+                          }}
+                        >
+                          ✓ مضاف ({qtyInInvoice})
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 11, color: "var(--muted, #7a8b82)" }}>
+                      <span style={{ padding: "1px 5px", background: "var(--surface-2, #f7faf6)", borderRadius: 4, border: "1px solid var(--line, #d5e0d8)", fontFamily: "monospace" }}>
+                        SKU: {item.sku}
+                      </span>
+                      <span>•</span>
+                      <span>الوحدة: <strong>{item.base_uom?.name_ar || "حبة"}</strong></span>
+                      <span>•</span>
+                      <span>المخزون: <strong>{Number(item.stock_quantity ?? 0).toLocaleString()}</strong></span>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 11, color: "var(--muted, #7a8b82)" }}>
-                    <span style={{ padding: "2px 6px", background: "var(--surface-2, #f7faf6)", borderRadius: 4, border: "1px solid var(--line, #d5e0d8)", fontFamily: "monospace" }}>
-                      SKU: {item.sku}
-                    </span>
-                    <span>•</span>
-                    <span>الوحدة: <strong>{item.base_uom?.name_ar || "حبة"}</strong></span>
+
+                  {/* Price & Action Buttons */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                    <div style={{ textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--brand-deep, #0f3d2e)", fontFamily: "monospace" }}>
+                        {money(item.cost_price * 1.25)}
+                      </span>
+                      <span style={{ fontSize: 9.5, color: "var(--muted, #7a8b82)" }}>سعر التجزئة</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        addNewLineWithItem(item);
+                      }}
+                      style={{
+                        height: 32,
+                        padding: "0 12px",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        whiteSpace: "nowrap",
+                        borderRadius: 6,
+                        background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Plus size={13} /> إضافة
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        addNewLineWithItem(item);
+                        setShowProductPicker(false);
+                      }}
+                      title="إضافة وإغلاق النافذة فوراً"
+                      style={{
+                        height: 32,
+                        padding: "0 8px",
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        borderRadius: 6,
+                        background: "var(--surface-2, #f7faf6)",
+                        border: "1px solid var(--line, #d5e0d8)",
+                        color: "var(--ink-soft, #4a5c52)",
+                      }}
+                    >
+                      إضافة وإغلاق
+                    </button>
                   </div>
                 </div>
-
-                {/* Price & Redesigned Add Button */}
-                <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-                  <div style={{ textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                    <span style={{ fontSize: 14, fontWeight: 900, color: "var(--brand-deep, #0f3d2e)", fontFamily: "monospace" }}>
-                      {money(item.cost_price * 1.25)}
-                    </span>
-                    <span style={{ fontSize: 10, color: "var(--muted, #7a8b82)" }}>سعر التجزئة</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addNewLineWithItem(item);
-                      setShowProductPicker(false);
-                      showToast(`تمت إضافة: ${item.name_ar}`);
-                    }}
-                    style={{
-                      height: 36,
-                      padding: "0 16px",
-                      fontSize: 13,
-                      fontWeight: 800,
-                      whiteSpace: "nowrap",
-                      flexShrink: 0,
-                      borderRadius: 8,
-                      background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
-                      boxShadow: "0 2px 6px rgba(26, 92, 69, 0.25)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <Plus size={15} /> إضافة
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </Modal>
