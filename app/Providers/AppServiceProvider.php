@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
+use Illuminate\Support\Facades\Gate;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -77,6 +79,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // صمام أمان المدير العام: يمنح المدير العام النشط كافة الصلاحيات تلقائياً
+        Gate::before(function ($user, $ability) {
+            return ($user->is_super_admin && $user->is_active) ? true : null;
+        });
     }
 }
+

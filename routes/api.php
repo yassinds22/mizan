@@ -54,6 +54,28 @@ Route::prefix('v1/core')->group(function () {
     Route::post('settings/init-client', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'initClient']);
     Route::get('settings/reset-preview', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'resetPreview']);
     Route::post('settings/reset-data', [\App\Http\Controllers\Api\V1\Core\SettingController::class, 'resetData']);
+
+    // 6. منظومة المستخدمين والصلاحيات والأدوار وسجل التدقيق (RBAC & Audit Trail)
+    Route::get('users', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'index']);
+    Route::post('users', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'store']);
+    Route::get('users/{id}', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'show']);
+    Route::put('users/{id}', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'update']);
+    Route::patch('users/{id}/toggle-active', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'toggleActive']);
+    Route::get('users/{id}/permissions', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'permissions']);
+    Route::post('users/{id}/permissions/toggle', [\App\Http\Controllers\Api\V1\Core\UserController::class, 'togglePermission']);
+
+    Route::get('roles', [\App\Http\Controllers\Api\V1\Core\RoleController::class, 'index']);
+    Route::post('roles', [\App\Http\Controllers\Api\V1\Core\RoleController::class, 'store']);
+    Route::put('roles/{id}/permissions', [\App\Http\Controllers\Api\V1\Core\RoleController::class, 'updatePermissions']);
+
+    Route::get('audit-logs', [\App\Http\Controllers\Api\V1\Core\AuditLogController::class, 'index']);
+
+    // 7. المصادقة وتسجيل الدخول والخروج (Authentication)
+    Route::post('auth/login', [\App\Http\Controllers\Api\V1\Core\AuthController::class, 'login']);
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('auth/logout', [\App\Http\Controllers\Api\V1\Core\AuthController::class, 'logout']);
+        Route::get('auth/me', [\App\Http\Controllers\Api\V1\Core\AuthController::class, 'me']);
+    });
 });
 
 Route::prefix('v1/accounting')->group(function () {

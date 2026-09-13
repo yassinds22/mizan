@@ -5,6 +5,8 @@ import { navGroups } from "@/data/navigation";
 import { coreApi } from "@/api/core";
 import type { PageId } from "@/types/navigation";
 
+import { usePermissions } from "@/hooks/usePermissions";
+
 interface SidebarProps {
   currentPage: PageId;
   onNavigate: (page: PageId) => void;
@@ -20,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onToggleCollapse,
 }) => {
+  const { can, isSuperAdmin } = usePermissions();
   const [branchName, setBranchName] = useState<string>("الفرع الرئيسي");
   const [companyName, setCompanyName] = useState<string>("ميزان");
 
@@ -115,30 +118,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {navGroups.map((group) => (
-          <div className="nav-section" key={group.label}>
-            <div className="nav-label">{group.label}</div>
-            {group.items.map((item) => {
-              const IconComponent =
-                (LucideIcons as Record<string, any>)[item.icon] || LucideIcons.Circle;
-              return (
-                <button
-                  key={item.id}
-                  className={`nav-item ${isNavActive(item.id) ? "active" : ""}`}
-                  title={item.label}
-                  onClick={() => {
-                    onNavigate(item.id);
-                    onCloseMobile();
-                  }}
-                >
-                  <IconComponent size={17} />
-                  <span className="nav-text">{item.label}</span>
-                  {item.id === "expiry" ? <span className="badge">11</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+        {navGroups.map((group) => {
+          const visibleItems = group.items.filter(
+            (item) => !item.permission || isSuperAdmin || can(item.permission)
+          );
+
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <div className="nav-section" key={group.label}>
+              <div className="nav-label">{group.label}</div>
+              {visibleItems.map((item) => {
+                const IconComponent =
+                  (LucideIcons as Record<string, any>)[item.icon] || LucideIcons.Circle;
+                return (
+                  <button
+                    key={item.id}
+                    className={`nav-item ${isNavActive(item.id) ? "active" : ""}`}
+                    title={item.label}
+                    onClick={() => {
+                      onNavigate(item.id);
+                      onCloseMobile();
+                    }}
+                  >
+                    <IconComponent size={17} />
+                    <span className="nav-text">{item.label}</span>
+                    {item.id === "expiry" ? <span className="badge">11</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
 
         <div className="sidebar-foot">
           <strong>{branchName}</strong>

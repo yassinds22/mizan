@@ -38,6 +38,7 @@ export interface NavItem {
   id: PageId;
   label: string;
   icon: string;
+  permission?: string;
 }
 
 export interface NavGroup {

@@ -32,7 +32,44 @@ import { SystemStatesPage } from "@/modules/settings/pages/SystemStatesPage";
 import { VouchersPage } from "@/modules/treasury/pages/VouchersPage";
 import { VoucherDocPage } from "@/modules/treasury/pages/VoucherDocPage";
 import { PartyStatementPage } from "@/modules/accounting/pages/PartyStatementPage";
+import { ShieldAlert } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import { LoginPage } from "@/modules/auth/LoginPage";
 import type { PageId } from "@/types/navigation";
+
+const PAGE_PERMISSIONS: Partial<Record<PageId, string>> = {
+  inventory: "inventory.view",
+  "item-detail": "products.view",
+  warehouses: "inventory.warehouses.manage",
+  "stock-move": "inventory.movements.view",
+  stocktake: "inventory.stocktake.manage",
+  "inventory-valuation": "inventory.valuation.view",
+  purchases: "purchases.invoices.view",
+  "purchase-doc": "purchases.invoices.view",
+  sales: "sales.invoices.view",
+  invoice: "sales.invoices.view",
+  partners: "sales.customers.view",
+  vouchers: "treasury.vouchers.view",
+  "voucher-doc": "treasury.vouchers.view",
+  "party-statement": "accounting.statements.view",
+  accounting: "accounting.chart.view",
+  "journal-entry": "accounting.journals.view",
+  "account-ledger": "accounting.ledger.view",
+  "trial-balance": "reports.trial_balance.view",
+  "profit-loss": "reports.profit_loss.view",
+  "balance-sheet": "reports.balance_sheet.view",
+  "vat-position": "reports.vat.view",
+  aging: "reports.aging.view",
+  "period-close": "accounting.period.close",
+  expiry: "expiry.dashboard.view",
+  fefo: "expiry.fefo.view",
+  "waste-alerts": "inventory.waste.create",
+  reports: "reports.trial_balance.view",
+  settings: "settings.view",
+  currencies: "settings.currencies.manage",
+  "users-roles": "users.view",
+  "system-states": "settings.view",
+};
 
 const VALID_PAGES: Set<string> = new Set([
   "dashboard",
@@ -82,6 +119,10 @@ const getInitialPage = (): PageId => {
 };
 
 export const App: React.FC = () => {
+  const { can, isSuperAdmin, currentUser } = usePermissions();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return !!localStorage.getItem("mizan_auth_token");
+  });
   const [currentPage, setCurrentPageState] = useState<PageId>(getInitialPage);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
@@ -91,6 +132,14 @@ export const App: React.FC = () => {
   const [statementPartyType, setStatementPartyType] = useState<"supplier" | "customer">("supplier");
   const [statementPartyId, setStatementPartyId] = useState<number | undefined>(undefined);
   const [selectedAccountIdForLedger, setSelectedAccountIdForLedger] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    const handleLogout = () => {
+      setIsAuthenticated(false);
+    };
+    window.addEventListener("mizan_auth_logout", handleLogout);
+    return () => window.removeEventListener("mizan_auth_logout", handleLogout);
+  }, []);
 
   const setCurrentPage = (page: PageId) => {
     setCurrentPageState(page);
@@ -126,6 +175,72 @@ export const App: React.FC = () => {
   }, [currentPage]);
 
   const renderScreen = () => {
+    // صمام أمان الصلاحيات: فحص ما إذا كانت الصفحة تتطلب تصريحاً خاصاً
+    const requiredPermission = PAGE_PERMISSIONS[currentPage];
+    if (requiredPermission && !isSuperAdmin && !can(requiredPermission)) {
+      return (
+        <div style={{ padding: "80px 20px", display: "flex", justifyContent: "center" }}>
+          <div
+            style={{
+              background: "var(--card-bg, #fff)",
+              borderRadius: 24,
+              padding: "44px 36px",
+              maxWidth: 520,
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.06)",
+              border: "1px solid var(--border-color, #e2e8f0)",
+            }}
+          >
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                background: "#fee2e2",
+                color: "#b91c1c",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 20px",
+              }}
+            >
+              <ShieldAlert size={38} />
+            </div>
+            <h2 style={{ margin: "0 0 10px", fontSize: 20, fontWeight: 800, color: "#1e293b" }}>
+              غير مصرح بالوصول (403 Forbidden)
+            </h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14, color: "var(--muted, #64748b)", lineHeight: 1.6 }}>
+              حسابك الحالي <strong>({currentUser?.name || "المستخدم"})</strong> بدور{" "}
+              <strong>[{currentUser?.primary_role || "مستخدم"}]</strong> لا يمتلك الصلاحية المطلوبة لعرض هذه الشاشة.
+            </p>
+            <div
+              style={{
+                background: "var(--panel-bg, #f8fafc)",
+                padding: "10px 16px",
+                borderRadius: 10,
+                fontSize: 12,
+                marginBottom: 24,
+                display: "inline-block",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              كود الصلاحية المطلوب:{" "}
+              <code style={{ color: "#b91c1c", fontWeight: 700 }}>{requiredPermission}</code>
+            </div>
+            <div>
+              <button
+                onClick={() => setCurrentPage("dashboard")}
+                className="btn btn-primary"
+                style={{ padding: "10px 28px", borderRadius: 10, fontWeight: 700, fontSize: 14 }}
+              >
+                العودة للوحة التحكم الرئيسية
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     switch (currentPage) {
       case "dashboard":
         return <DashboardPage onNavigate={setCurrentPage} />;
@@ -333,6 +448,19 @@ export const App: React.FC = () => {
         return <DashboardPage onNavigate={setCurrentPage} />;
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <LoginPage
+        onLoginSuccess={(user, token) => {
+          localStorage.setItem("mizan_auth_token", token);
+          localStorage.setItem("mizan_active_user_id", String(user.id));
+          setIsAuthenticated(true);
+          window.dispatchEvent(new Event("mizan_user_switched"));
+        }}
+      />
+    );
+  }
 
   return (
     <AppLayout currentPage={currentPage} onNavigate={setCurrentPage}>
