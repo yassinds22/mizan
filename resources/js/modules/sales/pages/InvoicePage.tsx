@@ -1284,11 +1284,11 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
               padding: "0 18px",
               background:
                 currentSavedInvoice?.status.value === "posted"
-                  ? "var(--muted, #7a8b82)"
-                  : "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+                  ? "var(--muted, #6B7280)"
+                  : "linear-gradient(145deg, #16A34A, #15803D)",
               fontSize: 13,
               fontWeight: 800,
-              boxShadow: "0 4px 14px rgba(26, 92, 69, 0.3)",
+              boxShadow: "0 4px 14px rgba(21, 128, 61, 0.28)",
               display: "flex",
               alignItems: "center",
               gap: 8,
@@ -1823,9 +1823,11 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
             style={{
               height: 42,
               padding: "0 18px",
-              background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+              background: "linear-gradient(145deg, #C5A46D, #B08D57)",
+              color: "#FFFFFF",
               fontSize: 13,
               fontWeight: 800,
+              boxShadow: "0 4px 12px rgba(176, 141, 87, 0.25)",
               display: "flex",
               alignItems: "center",
               gap: 6,
@@ -2834,10 +2836,10 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
                 marginTop: 6,
                 height: 44,
                 width: "100%",
-                background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+                background: "linear-gradient(145deg, #16A34A, #15803D)",
                 fontSize: 14,
                 fontWeight: 800,
-                boxShadow: "0 6px 18px rgba(26, 92, 69, 0.28)",
+                boxShadow: "0 6px 18px rgba(21, 128, 61, 0.28)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -2951,10 +2953,10 @@ export const InvoicePage: React.FC<InvoicePageProps> = ({ onBack, invoiceIdToVie
               style={{
                 height: 40,
                 padding: "0 22px",
-                background: "linear-gradient(145deg, var(--brand-mid, #2f8f6d), var(--brand, #1a5c45))",
+                background: "linear-gradient(145deg, #16A34A, #15803D)",
                 fontSize: 13,
                 fontWeight: 800,
-                boxShadow: "0 4px 14px rgba(26, 92, 69, 0.25)",
+                boxShadow: "0 4px 14px rgba(21, 128, 61, 0.25)",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
